@@ -10,6 +10,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from text_utils import clean_json_text
 
 
 DEFAULT_VALIDATOR_MODEL = "deepseek-chat"
@@ -216,6 +217,7 @@ def validate_json_with_deepseek(json_path, system_prompt, user_prompt, config, l
     candidate = parse_llm_json(content)
     assert_same_structure(original, candidate)
     normalized = normalize_to_original_order(original, candidate)
+    normalized = clean_json_text(normalized)
 
     backup_path = backup_json(json_path, label)
     atomic_write_json(json_path, normalized)

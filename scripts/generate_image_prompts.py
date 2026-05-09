@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from console_utils import configure_utf8_output
 from prompt_loader import render_prompt
+from text_utils import clean_json_text, clean_text
 
 configure_utf8_output()
 
@@ -117,7 +118,7 @@ def summarize_single_prompt(client_, prompt_text: str) -> str:
         temperature=0.2,
         messages=[{"role": "user", "content": prompt.strip()}],
     )
-    return resp.choices[0].message.content.strip()
+    return clean_text(resp.choices[0].message.content.strip())
 
 def generate_image_prompt(client_, narration_text: str, prior_summaries: list[str]) -> str:
     """
@@ -165,7 +166,7 @@ def generate_image_prompt(client_, narration_text: str, prior_summaries: list[st
             {"role": "user", "content": user_prompt},
         ],
     )
-    content = resp.choices[0].message.content.strip()
+    content = clean_text(resp.choices[0].message.content.strip())
     content = re.sub(r"^```.*|```$", "", content, flags=re.MULTILINE).strip()
     image_prompt = f"{content}, set in {historical_context}, rendered in {aesthetic_style}"
     return image_prompt
@@ -208,6 +209,7 @@ out_data = {
     "sections": sections,
 }
 
+out_data = clean_json_text(out_data)
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
     json.dump(out_data, f, ensure_ascii=False, indent=2)

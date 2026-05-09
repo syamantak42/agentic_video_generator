@@ -54,6 +54,7 @@ from openai import OpenAI
 import time
 from console_utils import configure_utf8_output
 from prompt_loader import render_prompt
+from text_utils import clean_json_text
 
 configure_utf8_output()
 
@@ -578,6 +579,7 @@ narration_script = "\n\n".join(all_segments)
 
 
 json_output_path = os.path.join(json_dir, "narration.json")
+final_json = clean_json_text(final_json)
 with open(json_output_path, "w", encoding="utf-8") as jf:
     json.dump(final_json, jf, ensure_ascii=False, indent=2)
 print(f"[OK] Structured JSON saved to {json_output_path}")

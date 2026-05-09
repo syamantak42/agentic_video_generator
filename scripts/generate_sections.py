@@ -44,6 +44,7 @@ import re
 from sentence_transformers import SentenceTransformer
 from console_utils import configure_utf8_output
 from prompt_loader import load_prompt, render_prompt
+from text_utils import clean_json_text, clean_text
 
 configure_utf8_output()
 
@@ -282,7 +283,7 @@ def extract_keywords(client, guidelines_text):
         ],
         stream=False
     )
-    keyword_text = response.choices[0].message.content.strip()
+    keyword_text = clean_text(response.choices[0].message.content.strip())
     print("\n[INFO] Extracted keywords:\n", keyword_text)
     return [kw.strip().lower() for kw in re.split(r"[,\n]", keyword_text) if kw.strip()]
 
@@ -433,6 +434,7 @@ for idx, guideline in enumerate(section_guidelines, start=1):
 # --------------------------------------------------------
 # Save as JSON
 # --------------------------------------------------------
+outline_data = clean_json_text(outline_data)
 json_path = os.path.join(json_dir, 'outline_texts.json')
 with open(json_path, 'w', encoding='utf-8') as f:
     json.dump(outline_data, f, indent=2, ensure_ascii=False)
