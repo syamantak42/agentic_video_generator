@@ -96,7 +96,94 @@ aesthetic_style = config.get("aesthetic_style", "")
 print(f"[LOAD] {len(sections)} sections | title: {video_title}")
 print(f"[CTX] historical_context: {bool(historical_context)} | characters: {len(characters)} | style: {bool(aesthetic_style)}")
 
+# --------------------- Diversity controls ---------------------
+SUMMARY_LOOKBACK = 10
+SIMILARITY_RETRY_THRESHOLD = 0.48
+
+TOKEN_STOPWORDS = {
+    "about", "above", "across", "after", "again", "against", "also", "amid",
+    "among", "and", "are", "around", "background", "before", "behind",
+    "below", "between", "both", "camera", "clear", "close", "composition",
+    "depicts", "during", "each", "from", "front", "image", "into", "main",
+    "near", "only", "over", "prompt", "rendered", "scene", "setting",
+    "shows", "still", "subject", "that", "the", "their", "there", "through",
+    "under", "visible", "with", "within",
+}
+
 # ---------------------- LLM helpers ----------------------------
+def build_characters_block() -> str:
+    """Return character guidance without encouraging invented canon details."""
+    if characters:
+        return json.dumps(characters, ensure_ascii=False, indent=2)
+    return (
+        "No fixed character canon is provided. Do not invent named ethnic, cultural, "
+        "caste, clan, or tribal groups. Describe people only by visible age range, "
+        "clothing, posture, expression, and role in the scene."
+    )
+
+
+def build_prior_visuals(prior_summaries: list[str]) -> str:
+    """Format prior prompt summaries as visual frames to avoid."""
+    recent_summaries = prior_summaries[-SUMMARY_LOOKBACK:] if prior_summaries else []
+    if not recent_summaries:
+        return "None yet."
+    return "\n".join(f"{idx}. {summary}" for idx, summary in enumerate(recent_summaries, start=1))
+
+
+def clean_prompt_response(content: str) -> str:
+    """Remove common chat artifacts while keeping the prompt as one clean line."""
+    content = re.sub(r"```(?:\w+)?", "", content)
+    content = content.replace("```", "")
+    content = re.sub(
+        r"(?im)^\s*(image prompt|prompt|response\s*[a-z]?)\s*[:\-]\s*",
+        "",
+        content,
+    )
+    content = re.sub(r"(?i)\bresponse\s*[a-z]?\s*[:\-]\s*", "", content)
+    content = " ".join(content.split())
+    return clean_text(content).strip(" \"'")
+
+
+def append_context_and_style(prompt: str) -> str:
+    """Append project context only when values are present."""
+    suffixes = []
+    context = str(historical_context).strip()
+    style = str(aesthetic_style).strip()
+    if context:
+        suffixes.append(f"set in {context}")
+    if style:
+        suffixes.append(f"rendered in {style}")
+    if suffixes:
+        prompt = f"{prompt.rstrip('.,')}, {', '.join(suffixes)}"
+    return clean_text(prompt)
+
+
+def visual_tokens(text: str) -> set[str]:
+    """Tokenize a visual fingerprint for lightweight similarity detection."""
+    normalized = clean_text(text.lower())
+    tokens = set(re.findall(r"[a-z0-9]+", normalized))
+    return {token for token in tokens if len(token) > 2 and token not in TOKEN_STOPWORDS}
+
+
+def strongest_visual_overlap(summary: str, prior_summaries: list[str]) -> tuple[float, str]:
+    """Return the strongest Jaccard overlap against recent visual summaries."""
+    current_tokens = visual_tokens(summary)
+    if not current_tokens:
+        return 0.0, ""
+
+    best_score = 0.0
+    best_match = ""
+    for prior in prior_summaries[-SUMMARY_LOOKBACK:]:
+        prior_tokens = visual_tokens(prior)
+        if not prior_tokens:
+            continue
+        score = len(current_tokens & prior_tokens) / len(current_tokens | prior_tokens)
+        if score > best_score:
+            best_score = score
+            best_match = prior
+    return best_score, best_match
+
+
 def summarize_single_prompt(client_, prompt_text: str) -> str:
     """
     Summarize an image prompt into a concise semantic descriptor.
@@ -120,14 +207,18 @@ def summarize_single_prompt(client_, prompt_text: str) -> str:
     )
     return clean_text(resp.choices[0].message.content.strip())
 
-def generate_image_prompt(client_, narration_text: str, prior_summaries: list[str]) -> str:
+def generate_image_prompt(
+    client_,
+    narration_text: str,
+    prior_summaries: list[str],
+) -> str:
     """
     Generate a detailed image prompt for a narration segment.
     
     Args:
         client_: OpenAI client instance for DeepSeek API
         narration_text: The narration text to create a visual prompt for
-        prior_summaries: List of semantic summaries from previously generated prompts (typically last 8)
+        prior_summaries: Semantic summaries from previously generated prompts
     
     Returns:
         str: Concise, detailed image prompt (<150 words) with explicit character descriptions,
@@ -138,12 +229,9 @@ def generate_image_prompt(client_, narration_text: str, prior_summaries: list[st
         - Includes specific character details from canon
         - Appends historical context and aesthetic style to final prompt
     """
-    # Keep context compact: only the last ~8 summaries
-    recent_summaries = prior_summaries[-8:] if prior_summaries else []
-    summaries_block = "\n".join(f"- {s}" for s in recent_summaries) if recent_summaries else "None yet."
-    #print("summaries: \n" + summaries_block)
+    prior_visuals = build_prior_visuals(prior_summaries)
+    characters_json = build_characters_block()
 
-    characters_json = json.dumps(characters, ensure_ascii=False, indent=2)
     sys_prompt = render_prompt(
         "generate_image_prompts_system.txt",
         video_title=video_title,
@@ -154,8 +242,7 @@ def generate_image_prompt(client_, narration_text: str, prior_summaries: list[st
     user_prompt = render_prompt(
         "generate_image_prompts_user.txt",
         narration_text=narration_text,
-        characters_json=characters_json,
-        summaries_block=summaries_block,
+        prior_visuals=prior_visuals,
     )
 
     resp = client_.chat.completions.create(
@@ -166,10 +253,10 @@ def generate_image_prompt(client_, narration_text: str, prior_summaries: list[st
             {"role": "user", "content": user_prompt},
         ],
     )
-    content = clean_text(resp.choices[0].message.content.strip())
-    content = re.sub(r"^```.*|```$", "", content, flags=re.MULTILINE).strip()
-    image_prompt = f"{content}, set in {historical_context}, rendered in {aesthetic_style}"
-    return image_prompt
+    content = clean_prompt_response(resp.choices[0].message.content.strip())
+    if not content:
+        raise ValueError("Image prompt generation returned empty content.")
+    return append_context_and_style(content)
 
 # ------------------------- Main loop ---------------------------
 all_prompt_summaries: list[str] = []
@@ -189,10 +276,23 @@ for sec_idx, sec in enumerate(sections, start=1):
         print(f"  Generating image prompt {count}/{total} ...")
 
         img_prompt = generate_image_prompt(client, t, all_prompt_summaries)
+        summary = summarize_single_prompt(client, img_prompt)
+
+        similarity_score, similar_prior = strongest_visual_overlap(summary, all_prompt_summaries)
+        if similarity_score >= SIMILARITY_RETRY_THRESHOLD:
+            print(
+                "  [DIVERSITY] Near-duplicate visual frame detected "
+                f"({similarity_score:.0%} overlap); regenerating once ..."
+            )
+            img_prompt = generate_image_prompt(
+                client,
+                t,
+                all_prompt_summaries + [summary],
+            )
+            summary = summarize_single_prompt(client, img_prompt)
+
         print(img_prompt)
         sec_image_prompts.append(img_prompt)
-
-        summary = summarize_single_prompt(client, img_prompt)
         sec_image_summaries.append(summary)
         all_prompt_summaries.append(summary)
 

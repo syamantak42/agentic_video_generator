@@ -1,9 +1,11 @@
 You are maintaining a concise running summary of a YouTube narration script.
-Here is the summary so far:
+
+STORY_SUMMARY_SO_FAR:
 ${story_summary}
 
-Here is the newly generated section:
+NEWLY_GENERATED_SECTION:
 ${new_response}
 
-Update the summary to reflect everything so far, in 3 to 6 sentences.
+TASK:
+Update `STORY_SUMMARY_SO_FAR:` using `NEWLY_GENERATED_SECTION:` so it reflects everything so far, in 3 to 6 sentences.
 Keep it brief but concise, coherent, dense, information-rich; preserving continuity and key narrative points.

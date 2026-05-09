@@ -1,2 +1,8 @@
-Extract the most relevant single-word keywords from the text.
+MARKER_DEFINITIONS:
+The user message contains one marker.
+
+- `SECTION_GUIDELINES:` contains the full set of requested section guidelines. Extract keywords only from this text.
+
+TASK:
+Extract the most relevant single-word keywords from `SECTION_GUIDELINES:`.
 Always include proper names. Return only comma-separated keywords.

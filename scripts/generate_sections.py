@@ -279,7 +279,7 @@ def extract_keywords(client, guidelines_text):
         model=MODEL_NAME,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": guidelines_text}
+            {"role": "user", "content": f"SECTION_GUIDELINES:\n{guidelines_text}"}
         ],
         stream=False
     )

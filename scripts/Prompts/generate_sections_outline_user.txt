@@ -1,6 +1,6 @@
-video_title: ${video_title}
-section_number: ${section_number} of ${n_section}
-section_guideline: ${section_guideline}
-previous_section_summary: ${previous_section_summary}
-evidence:
+VIDEO_TITLE: ${video_title}
+SECTION_NUMBER: ${section_number} of ${n_section}
+SECTION_GUIDELINE: ${section_guideline}
+PREVIOUS_SECTION_SUMMARY: ${previous_section_summary}
+EVIDENCE:
 ${evidence}

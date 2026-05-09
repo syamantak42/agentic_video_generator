@@ -1,25 +1,25 @@
-PROJECT CONTEXT
-Video title:
+PROJECT_CONTEXT:
+VIDEO_TITLE:
 ${video_title}
 
-Expected section count:
+EXPECTED_SECTION_COUNT:
 ${n_section}
 
-Original user section guidelines:
+ORIGINAL_USER_SECTION_GUIDELINES:
 ${section_guidelines_json}
 
-Narration style requirements:
+NARRATION_STYLE_REQUIREMENTS:
 ${narration_style_json}
 
-Historical / subject context:
+HISTORICAL_OR_SUBJECT_CONTEXT:
 ${historical_context}
 
-Character canon:
+CHARACTER_CANON:
 ${characters_json}
 
-TASK
+TASK:
 Apply the system criteria to the outline JSON below.
 Return the revised JSON only.
 
-ORIGINAL OUTLINE JSON
+ORIGINAL_OUTLINE_JSON:
 ${outline_json}

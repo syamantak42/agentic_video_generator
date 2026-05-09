@@ -545,7 +545,12 @@ if faiss_index is None:
 print("Building per-section queries from retrieved chunks...")
 contexts = [hybrid_retrieve(outline, faiss_index, model, chunks, k=6) for outline in outlines]
 queries = [
-    f"section number: {i + 1} section title: {sections[i]} section outline: {outlines[i]} section context: {contexts[i]}"
+    (
+        f"SECTION_NUMBER: {i + 1}\n"
+        f"SECTION_TITLE: {sections[i]}\n"
+        f"SECTION_OUTLINE: {outlines[i]}\n"
+        f"SECTION_CONTEXT:\n{contexts[i]}"
+    )
     for i in range(len(sections))
 ]
 

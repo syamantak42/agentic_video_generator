@@ -1,5 +1,8 @@
-Summarize the following image prompt in a dense sentence,
-describing only what is visually shown (setting, composition, main action) - strip all adjectives
+Create a compact visual fingerprint for repetition control.
 
-Image prompt:
+Include only setting, main subject, action or pose, camera/framing, and major objects.
+Exclude style, mood, period, ethnicity, and decorative adjectives.
+Return one short sentence.
+
+IMAGE_PROMPT:
 ${prompt_text}
