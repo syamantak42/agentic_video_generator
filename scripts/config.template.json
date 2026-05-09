@@ -1,0 +1,47 @@
+{
+  "video_title": "Your Video Title Here",
+  "n_section": 10,
+  "section_outlines": [
+    "Section 1: Opening and introduction",
+    "Section 2: First key topic",
+    "Section 3: Second key topic",
+    "Section 4: Story or narrative element 1",
+    "Section 5: Story or narrative element 2",
+    "Section 6: Story or narrative element 3",
+    "Section 7: Development point",
+    "Section 8: Climax or turning point",
+    "Section 9: Historical context or analysis",
+    "Section 10: Conclusion and reflection"
+  ],
+  "reference_links": [
+    "https://en.wikipedia.org/wiki/YourTopic",
+    "https://www.example.com/relevant-page"
+  ],
+  "narration_style": [
+    "Use a conversational yet informative tone",
+    "Maintain consistency throughout the narrative",
+    "Avoid clichéd expressions and obvious statements",
+    "Ensure dense, meaningful language",
+    "Create smooth transitions between sections"
+  ],
+  "intro_material": [
+    "source_document.pdf"
+  ],
+  "historical_context": "The time period, location, and cultural context of your story",
+  "characters": {
+    "MainCharacter": "Description including appearance, role, and key traits",
+    "SecondaryCharacter": "Another character description"
+  },
+  "aesthetic_style": "Visual style guide (e.g., 'impressionist, earthy tones' or 'cinematic, realistic')",
+
+  "_project_config": {
+    "project_name": "YourProject",
+    "image_config": {
+      "model": "seedream-v4"
+    },
+    "tts_config": {
+      "model": "kokoro",
+      "voice_id": "af"
+    }
+  }
+}
