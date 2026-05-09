@@ -52,7 +52,10 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import time
+from console_utils import configure_utf8_output
 from prompt_loader import render_prompt
+
+configure_utf8_output()
 
 # ========================================================
 # Helper: Get project name and paths from config

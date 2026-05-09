@@ -19,8 +19,11 @@ Usage:
 import json
 import os
 
+from console_utils import configure_utf8_output
 from prompt_loader import load_prompt, render_prompt
 from validator_utils import load_project_config, read_json, validate_json_with_deepseek
+
+configure_utf8_output()
 
 
 def build_prompts(config, narration_data, outline_data):

@@ -31,6 +31,9 @@ import numpy as np
 import cv2
 from moviepy.editor import ImageSequenceClip, AudioFileClip
 from pydub import AudioSegment
+from console_utils import configure_utf8_output
+
+configure_utf8_output()
 
 
 # --------------------------------------------------------

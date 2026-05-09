@@ -42,7 +42,10 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import re
 from sentence_transformers import SentenceTransformer
+from console_utils import configure_utf8_output
 from prompt_loader import load_prompt, render_prompt
+
+configure_utf8_output()
 
 
 MIN_CHUNK_SIZE = 5000

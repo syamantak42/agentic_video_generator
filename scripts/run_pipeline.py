@@ -9,6 +9,9 @@ import subprocess
 import sys
 import os
 import json
+from console_utils import configure_utf8_output
+
+configure_utf8_output()
 
 
 def load_config(project_name):

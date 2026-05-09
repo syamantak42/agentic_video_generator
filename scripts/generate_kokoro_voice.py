@@ -7,6 +7,9 @@ import numpy as np
 import soundfile as sf
 import subprocess
 from kokoro import KPipeline
+from console_utils import configure_utf8_output
+
+configure_utf8_output()
 
 # ------------------------------------------------
 # Helper: Get project name and paths from config

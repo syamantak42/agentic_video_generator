@@ -31,7 +31,10 @@ import json
 import re
 from dotenv import load_dotenv
 from openai import OpenAI
+from console_utils import configure_utf8_output
 from prompt_loader import render_prompt
+
+configure_utf8_output()
 
 # --------------------------------------------------------
 # Helper: Get project name and paths from config
@@ -210,4 +213,3 @@ with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
     json.dump(out_data, f, ensure_ascii=False, indent=2)
 
 print(f"\n[OK] Image prompts saved to {OUTPUT_PATH}")
-
