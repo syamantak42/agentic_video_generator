@@ -114,6 +114,11 @@ python generate_clips.py YourProject
 python make_video.py YourProject
 ```
 
+## Prompt Templates
+
+Large LLM prompt templates live in `scripts/Prompts/`.
+The Python scripts load them with `prompt_loader.py` and fill placeholders such as `${video_title}` or `${narration_json}` at runtime.
+
 ## Outputs
 
 Generated files are written inside your project folder:

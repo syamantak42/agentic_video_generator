@@ -1,0 +1,2 @@
+Extract the most relevant single-word keywords from the text.
+Always include proper names. Return only comma-separated keywords.

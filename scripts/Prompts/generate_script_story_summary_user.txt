@@ -1,0 +1,9 @@
+You are maintaining a concise running summary of a YouTube narration script.
+Here is the summary so far:
+${story_summary}
+
+Here is the newly generated section:
+${new_response}
+
+Update the summary to reflect everything so far, in 3 to 6 sentences.
+Keep it brief but concise, coherent, dense, information-rich; preserving continuity and key narrative points.

@@ -42,6 +42,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import re
 from sentence_transformers import SentenceTransformer
+from prompt_loader import load_prompt, render_prompt
 
 
 MIN_CHUNK_SIZE = 5000
@@ -269,8 +270,7 @@ def process_all_documents(source_dir, reference_links, intro_material=None):
 
 def extract_keywords(client, guidelines_text):
     """Extract a compact keyword set from section guidelines."""
-    system_prompt = """Extract the most relevant single-word keywords from the text.
-Always include proper names. Return only comma-separated keywords."""
+    system_prompt = load_prompt("generate_sections_keywords_system.txt")
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[
@@ -387,34 +387,7 @@ if len(section_guidelines) != n_section:
 outline_data = []
 previous_summary = ""
 
-content = f"""You are generating section outlines for a video script.
-You must follow the provided section guideline very closely.
-Do not invent a different section topic, order, emphasis, or narrative function.
-Do not generalize the guideline into a generic summary.
-Expand the given section guideline into:
-1. a concise section title
-2. a compact, information-rich, dense outline grounded in the guideline and evidence
-
-Rules:
-- Keep the section faithful to the guideline's subject, sequence, and emphasis.
-- Treat the guideline as the required backbone of the section.
-- Use the evidence to add concrete detail, context, names, causes, consequences, and texture on top of that backbone.
-- The final outline should contain both:
-  1. the full substance of the guideline
-  2. additional material synthesized from the retrieved evidence
-- It is acceptable to reuse wording from the guideline, but do not let the outline stop there.
-- Do not replace retrieved detail with a restatement of the guideline alone.
-- If evidence is weak or incomplete, preserve the full substance of the guideline.
-- Do not compress the guideline into a smaller or more generic version.
-- When evidence is missing, restate and expand the provided guideline rather than replacing it.
-- Keep the outline very concise but information rich: roughly 3 to 6 sentences, or a short compact paragraph.
-- Prefer only the most important supporting details rather than exhaustive coverage.
-- Do not turn the outline into a mini-essay.
-- You must maintain continuity with the previous section when relevant.
-- Return exactly this format:
-section_title: "..."
-outline: "..."
-"""
+content = load_prompt("generate_sections_outline_system.txt")
 
 for idx, guideline in enumerate(section_guidelines, start=1):
     print(f"\n[SECTION {idx}/{len(section_guidelines)}] Processing")
@@ -422,13 +395,15 @@ for idx, guideline in enumerate(section_guidelines, start=1):
     retrieved = hybrid_retrieve(guideline, chunks, retrieval_model, chunk_embeddings, keywords, top_k=8)
     print(f"[RETRIEVAL] Selected {len(retrieved)} chunks")
     evidence_text = "\n\n".join(retrieved)
-    user_prompt = f"""video_title: {video_title}
-section_number: {idx} of {n_section}
-section_guideline: {guideline}
-previous_section_summary: {previous_summary if previous_summary else "None"}
-evidence:
-{evidence_text}
-"""
+    user_prompt = render_prompt(
+        "generate_sections_outline_user.txt",
+        video_title=video_title,
+        section_number=idx,
+        n_section=n_section,
+        section_guideline=guideline,
+        previous_section_summary=previous_summary if previous_summary else "None",
+        evidence=evidence_text,
+    )
 
     print(f"[API] Calling DeepSeek for section {idx}")
     response = client.chat.completions.create(

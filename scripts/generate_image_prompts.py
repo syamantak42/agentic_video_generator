@@ -31,6 +31,7 @@ import json
 import re
 from dotenv import load_dotenv
 from openai import OpenAI
+from prompt_loader import render_prompt
 
 # --------------------------------------------------------
 # Helper: Get project name and paths from config
@@ -104,12 +105,10 @@ def summarize_single_prompt(client_, prompt_text: str) -> str:
         str: Single-sentence summary capturing visual scene, setting, and main action.
              Excludes artistic style but preserves camera angle if present.
     """
-    prompt = f"""
-                Summarize the following image prompt in a dense sentence,
-                describing only what is visually shown (setting, composition, main action) - strip all adjectives
-                Image prompt:
-                {prompt_text}
-            """
+    prompt = render_prompt(
+        "generate_image_prompts_summary_user.txt",
+        prompt_text=prompt_text,
+    )
     resp = client_.chat.completions.create(
         model="deepseek-chat",
         temperature=0.2,
@@ -140,52 +139,20 @@ def generate_image_prompt(client_, narration_text: str, prior_summaries: list[st
     summaries_block = "\n".join(f"- {s}" for s in recent_summaries) if recent_summaries else "None yet."
     #print("summaries: \n" + summaries_block)
 
-    sys_prompt = f"""
-        You are an expert visual scene designer creating image prompts for a historical mythological video titled "{video_title}".
+    characters_json = json.dumps(characters, ensure_ascii=False, indent=2)
+    sys_prompt = render_prompt(
+        "generate_image_prompts_system.txt",
+        video_title=video_title,
+        historical_context=historical_context,
+        characters_json=characters_json,
+    )
 
-        Historical context is {historical_context}
-
-        Your task: For each narration text, describe ONE clear, coherent image that visually represents that moment.
-        -Describe a single clear visual frame -- one moment, one focal action.
-        -The scene should be simple, not complex
-        - Write the prompt in clear, concrete visual language.
-       
-        
-
-            - Describe each individual characters VISUALLY, with meticulous details, 
-            - Always describe attire appropriate for historical context for every single character and explicitly specify their ethnicity.
-            - INCLUDE every SINGLE detail from the character canon, and add as much detail as possible
-            - character canon:
-                {json.dumps(characters, ensure_ascii=False, indent=2)}
-            - NEVER refer to any individual character by their names, but ONLY by the visual description from character canon below
-            
-                       
-            Additional Rules:
-            - Use concrete visual language only (no metaphors or abstract symbolism).
-            - ALWAYS less than 150 words.
-            - Avoid any direct depiction of violence.
-            - Avoid any maps.    
-            - Do not use anything sexually explicit.
-            - Avoid words meaning binding, tying, etc.
-            - Avoid any depiction of children in a dangerous situation.
-            - Never include any mention of texts in the image prompts. 
-            """.strip()
-
-    user_prompt = f'''
-        Narration text:
-        """{narration_text}"""
-        - When depicting any character mentioned in the character canon below, INCLUDE the character description VERBATIM from the canon
-        - character canon:
-                {json.dumps(characters, ensure_ascii=False, indent=2)}
-
-            - Ensure this prompt is COMPLETELY, ABSOLTELY distinct from the earlier ones shown below (avoid same framing/scene).
-            
-
-            Previous prompts (summarized):
-            {summaries_block}
-
-        Return ONLY the single image prompt line (no preface, no code block).
-        '''.strip()
+    user_prompt = render_prompt(
+        "generate_image_prompts_user.txt",
+        narration_text=narration_text,
+        characters_json=characters_json,
+        summaries_block=summaries_block,
+    )
 
     resp = client_.chat.completions.create(
         model="deepseek-chat",
@@ -243,5 +210,4 @@ with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
     json.dump(out_data, f, ensure_ascii=False, indent=2)
 
 print(f"\n[OK] Image prompts saved to {OUTPUT_PATH}")
-
 

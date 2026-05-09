@@ -52,6 +52,7 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import time
+from prompt_loader import render_prompt
 
 # ========================================================
 # Helper: Get project name and paths from config
@@ -364,17 +365,11 @@ def update_story_summary(client, story_summary, new_response):
         Passed to subsequent section generation to maintain continuity
     """
     
-    prompt = f"""
-You are maintaining a concise running summary of a YouTube narration script.
-Here is the summary so far:
-{story_summary}
-
-Here is the newly generated section:
-{new_response}
-
-Update the summary to reflect everything so far, in 3 to 6 sentences.
-Keep it brief but concise, coherent, dense, information-rich; preserving continuity and key narrative points.
-"""
+    prompt = render_prompt(
+        "generate_script_story_summary_user.txt",
+        story_summary=story_summary,
+        new_response=new_response,
+    )
     summary_resp = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
@@ -551,42 +546,12 @@ queries = [
 ]
 
 # System prompt
-system_prompt =  f"""
-You are a helpful assistant and expert at making popular YouTube videos.
-You will generate the narration script of a video titled: "{video_title}", section by section
-The narration is divided into {n_section} sections.
-
-{narration_style}
-
-Guidelines:
-- Follow the provided outline and context precisely for each section.
-- Maintain natural continuity and smooth transition from the previous section
- -you will receive the following:
- - "section title" = title of the section
-  - "section outline" = outline of the section
-  - "section context" = context material to generate the section
-  - "EARLIER_SECTIONS_SUMMARY" = summary of the sections already generated, to remind you where you are in the story
-  - "FULL_OUTLINE_WITH_STATUS"= shows the full outline with flags showing which sections are complete and what is pending
-
-narration_style: 
-
-Respond ONLY with valid JSON in this format:
-{{
-  "sections": [
-    {{
-      "section_title": "<same as provided>",
-      "narration_text": [
-        "Segment 1 (100 to 200 words)",
-        "Segment 2 (100 to 200 words)",
-        "Segment 3 (optional, 100 to 200 words)"
-      ]
-    }}
-  ]
-}}
-
-Each 'narration_text' entry should be a natural continuation of the section, forming 2 to 3 concise narrative segments.
-Do not include any text outside this JSON.
-"""
+system_prompt = render_prompt(
+    "generate_script_narration_system.txt",
+    video_title=video_title,
+    n_section=n_section,
+    narration_style=narration_style,
+)
 # Generate narration JSONs
 responses = chat_with_llm(system_prompt, queries, outline_data, my_tkn)
 

@@ -1,0 +1,25 @@
+PROJECT CONTEXT
+Video title:
+${video_title}
+
+Expected section count:
+${n_section}
+
+Narration style requirements:
+${narration_style_json}
+
+Historical / subject context:
+${historical_context}
+
+Character canon:
+${characters_json}
+
+VALIDATED OUTLINE JSON, if available:
+${outline_json}
+
+TASK
+Apply the system criteria to the narration JSON below.
+Return the revised JSON only.
+
+ORIGINAL NARRATION JSON
+${narration_json}

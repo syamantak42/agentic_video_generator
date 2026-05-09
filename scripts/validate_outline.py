@@ -18,6 +18,7 @@ Usage:
 import json
 import os
 
+from prompt_loader import load_prompt, render_prompt
 from validator_utils import load_project_config, read_json, validate_json_with_deepseek
 
 
@@ -29,64 +30,17 @@ def build_prompts(config, outline_data):
     characters = config.get("characters", {})
     n_section = config.get("n_section", len(outline_data) if isinstance(outline_data, list) else "")
 
-    system_prompt = """
-You are a senior YouTube story editor and outline validator.
-
-Your job is to review a generated video outline, silently judge whether it is coherent,
-compelling, well-paced, specific, non-repetitive, and aligned with the user's project
-requirements, then return an improved JSON version.
-
-Strict rules:
-- Return ONLY valid JSON.
-- Preserve the original JSON structure exactly.
-- Preserve the same top-level type.
-- Preserve the same number of sections/items.
-- Preserve every existing key exactly.
-- Do not add keys.
-- Do not remove keys.
-- Do not change lists into objects or objects into lists.
-- Do not change non-text primitive types.
-- Edit only textual values where improvement is needed.
-- Keep the outline suitable for a strong YouTube video: clear arc, strong opening,
-  distinct section jobs, good transitions, specificity, no filler, no avoidable repetition.
-""".strip()
-
-    user_prompt = f"""
-PROJECT CONTEXT
-Video title:
-{video_title}
-
-Expected section count:
-{n_section}
-
-Original user section guidelines:
-{json.dumps(section_guidelines, ensure_ascii=False, indent=2)}
-
-Narration style requirements:
-{json.dumps(narration_style, ensure_ascii=False, indent=2)}
-
-Historical / subject context:
-{historical_context}
-
-Character canon:
-{json.dumps(characters, ensure_ascii=False, indent=2)}
-
-TASK
-Review the outline JSON below as a validator agent.
-Ask yourself internally:
-- Does the outline form a coherent video from beginning to end?
-- Does each section have a distinct purpose?
-- Does it satisfy the user's requested subject, tone, structure, and section guidelines?
-- Would it make a strong YouTube video rather than a flat encyclopedia summary?
-- Are there missing transitions, repeated ideas, vague section descriptions, or weak pacing?
-
-Then edit the outline JSON to make it more coherent, focused, and task-aligned.
-
-Return ONLY the revised JSON. Keep the original JSON structure exactly.
-
-ORIGINAL OUTLINE JSON
-{json.dumps(outline_data, ensure_ascii=False, indent=2)}
-""".strip()
+    system_prompt = load_prompt("validate_outline_system.txt")
+    user_prompt = render_prompt(
+        "validate_outline_user.txt",
+        video_title=video_title,
+        n_section=n_section,
+        section_guidelines_json=json.dumps(section_guidelines, ensure_ascii=False, indent=2),
+        narration_style_json=json.dumps(narration_style, ensure_ascii=False, indent=2),
+        historical_context=historical_context,
+        characters_json=json.dumps(characters, ensure_ascii=False, indent=2),
+        outline_json=json.dumps(outline_data, ensure_ascii=False, indent=2),
+    )
 
     return system_prompt, user_prompt
 

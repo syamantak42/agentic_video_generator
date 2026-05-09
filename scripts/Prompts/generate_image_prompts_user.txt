@@ -1,0 +1,13 @@
+Narration text:
+"""${narration_text}"""
+
+- When depicting any character mentioned in the character canon below, INCLUDE the character description VERBATIM from the canon
+- character canon:
+${characters_json}
+
+- Ensure this prompt is COMPLETELY, ABSOLTELY distinct from the earlier ones shown below (avoid same framing/scene).
+
+Previous prompts (summarized):
+${summaries_block}
+
+Return ONLY the single image prompt line (no preface, no code block).

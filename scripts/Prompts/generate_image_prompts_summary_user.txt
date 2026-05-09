@@ -1,0 +1,5 @@
+Summarize the following image prompt in a dense sentence,
+describing only what is visually shown (setting, composition, main action) - strip all adjectives
+
+Image prompt:
+${prompt_text}
