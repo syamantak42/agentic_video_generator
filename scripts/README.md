@@ -87,6 +87,12 @@ For the guided app experience:
 streamlit run scripts/streamlit_app.py
 ```
 
+From inside the `scripts/` folder, this convenience form also works:
+
+```bash
+python streamlit_app.py
+```
+
 The app helps create `source_material/config.json`, download or upload source files, run pipeline stages, review generated images, and compose the final video.
 
 ### Command Line

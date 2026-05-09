@@ -63,12 +63,19 @@ def inject_css() -> None:
         <style>
         :root {
             --surface: #ffffff;
-            --ink: #172026;
-            --muted: #5f6b73;
-            --line: #d7dde2;
-            --accent: #0f766e;
-            --accent-soft: #e6f4f1;
-            --warn-soft: #fff4de;
+            --ink: #14213d;
+            --muted: #58708a;
+            --line: #d8e5f2;
+            --accent: #0077b6;
+            --accent-2: #00a896;
+            --accent-soft: #e0f7fa;
+            --warn-soft: #fff3c4;
+            --page: #f4fbff;
+        }
+
+        .stApp {
+            background:
+                linear-gradient(180deg, #f0fbff 0%, #ffffff 46%, #f7fbff 100%);
         }
 
         .block-container {
@@ -86,8 +93,10 @@ def inject_css() -> None:
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 22px 24px;
-            background: linear-gradient(180deg, #ffffff 0%, #f7faf9 100%);
+            background:
+                linear-gradient(135deg, rgba(0, 168, 150, .16) 0%, rgba(0, 119, 182, .10) 45%, #ffffff 100%);
             margin-bottom: 18px;
+            box-shadow: 0 10px 30px rgba(20, 33, 61, .06);
         }
 
         .app-hero h1 {
@@ -107,6 +116,7 @@ def inject_css() -> None:
             border-radius: 8px;
             padding: 14px 16px;
             background: var(--surface);
+            box-shadow: 0 6px 18px rgba(20, 33, 61, .05);
         }
 
         .metric-label {
@@ -139,6 +149,7 @@ def inject_css() -> None:
             padding: 14px 16px;
             background: var(--surface);
             margin-bottom: 10px;
+            box-shadow: 0 6px 18px rgba(20, 33, 61, .04);
         }
 
         .ok-pill, .wait-pill {
@@ -151,6 +162,13 @@ def inject_css() -> None:
         .ok-pill {
             background: var(--accent-soft);
             color: var(--accent);
+        }
+
+        div.stButton > button[kind="primary"],
+        div.stFormSubmitButton > button {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            color: #ffffff;
+            border: 0;
         }
 
         .wait-pill {
@@ -201,6 +219,13 @@ def list_projects() -> list[str]:
 
 
 def default_config(project: str) -> dict:
+    template_path = REPO_ROOT / "config.template.json"
+    if template_path.exists():
+        with template_path.open("r", encoding="utf-8") as f:
+            config = json.load(f)
+        config.setdefault("_project_config", {})["project_name"] = project
+        return config
+
     return {
         "video_title": "",
         "n_section": 6,
@@ -288,6 +313,9 @@ def safe_filename_from_url(url: str, fallback_ext: str = "") -> str:
 
 
 def classify_url(url: str) -> str:
+    if "wikipedia.org/wiki/" in url.lower():
+        return "reference"
+
     lower_path = urlparse(url).path.lower()
     if lower_path.endswith(".pdf"):
         return "pdf"
@@ -341,6 +369,26 @@ def output_status(project: str) -> dict[str, bool]:
         "tts_index.json": (base / "tts_index.json").exists(),
         "video": any(output_dir(project, "videos").glob("*.mp4")),
     }
+
+
+def config_warnings(config: dict) -> list[str]:
+    warnings: list[str] = []
+    if not config.get("video_title", "").strip() or config.get("video_title") == "Your Video Title Here":
+        warnings.append("Video title is empty or still a template value.")
+    section_outlines = config.get("section_outlines", [])
+    if not section_outlines:
+        warnings.append("No section outlines are saved.")
+    elif any("Section 1: Opening and introduction" in str(item) for item in section_outlines):
+        warnings.append("Section outlines still look like template defaults.")
+    if not config.get("narration_style", []):
+        warnings.append("No narration style rules are saved.")
+    if not config.get("historical_context", "").strip():
+        warnings.append("Historical or subject context is empty.")
+    if not config.get("aesthetic_style", "").strip():
+        warnings.append("Aesthetic style is empty.")
+    if not config.get("_project_config", {}).get("project_name"):
+        warnings.append("Project name is missing from _project_config.")
+    return warnings
 
 
 def run_script(script_name: str, project: str) -> tuple[int, str]:
@@ -578,15 +626,10 @@ def render_project_metrics(project: str) -> None:
 
 
 def step_controls(total_steps: int) -> None:
-    left, right = st.columns([1, 1])
-    with left:
-        if st.button("Previous", disabled=st.session_state.config_step == 0):
-            st.session_state.config_step = max(0, st.session_state.config_step - 1)
-            st.rerun()
-    with right:
-        if st.button("Next", disabled=st.session_state.config_step >= total_steps - 1):
-            st.session_state.config_step = min(total_steps - 1, st.session_state.config_step + 1)
-            st.rerun()
+    st.caption("Use the step's Save and continue button to write changes before moving forward.")
+    if st.button("Previous", disabled=st.session_state.config_step == 0):
+        st.session_state.config_step = max(0, st.session_state.config_step - 1)
+        rerun_app()
 
 
 def render_config_wizard(project: str) -> None:
@@ -605,7 +648,7 @@ def render_config_wizard(project: str) -> None:
             n_section = st.number_input("Number of sections", min_value=1, max_value=30, value=int(config.get("n_section", 6)))
             historical_context = st.text_area("Historical or subject context", value=config.get("historical_context", ""), height=110)
 
-            submitted = st.form_submit_button("Save basics", use_container_width=True)
+            submitted = st.form_submit_button("Save basics and continue", use_container_width=True)
             if submitted:
                 config["video_title"] = title.strip()
                 config["n_section"] = int(n_section)
@@ -613,6 +656,8 @@ def render_config_wizard(project: str) -> None:
                 config["_project_config"]["project_name"] = project
                 save_config(project, config)
                 st.success("Basics saved.")
+                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+                rerun_app()
 
     elif step == 1:
         outlines = config.get("section_outlines", [])
@@ -620,12 +665,14 @@ def render_config_wizard(project: str) -> None:
         with st.form("outline_form"):
             st.caption("Write one section guideline per line. The generation script will turn these into structured sections.")
             updated = st.text_area("Section guidelines", value=outline_text, height=340)
-            submitted = st.form_submit_button("Save outline", use_container_width=True)
+            submitted = st.form_submit_button("Save outline and continue", use_container_width=True)
             if submitted:
                 config["section_outlines"] = split_lines(updated)
                 config["n_section"] = len(config["section_outlines"])
                 save_config(project, config)
                 st.success(f"Saved {len(config['section_outlines'])} section guidelines.")
+                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+                rerun_app()
 
     elif step == 2:
         st.caption("PDF and TXT links are downloaded into source_material. HTML and Wikipedia links stay as reference links for retrieval.")
@@ -650,6 +697,9 @@ def render_config_wizard(project: str) -> None:
                     if saved_name:
                         downloaded.append(saved_name)
                         results.append(f"Downloaded: {saved_name}")
+                    elif "wikipedia.org/wiki/" in url.lower():
+                        references.append(url)
+                        results.append(f"Wikipedia reference link: {url}")
                     else:
                         references.append(url)
                         results.append(f"Reference link: {url}")
@@ -671,6 +721,12 @@ def render_config_wizard(project: str) -> None:
             files = sorted(p.name for p in source_dir(project).glob("*") if p.is_file())
             st.code("\n".join(files) if files else "No files yet.", language="text")
 
+        if st.button("Save source links and continue", use_container_width=True):
+            config["reference_links"] = list(dict.fromkeys(split_lines(link_text)))
+            save_config(project, config)
+            st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+            rerun_app()
+
     elif step == 3:
         tts_config = config.get("_project_config", {}).get("tts_config", {})
         validator_config = config.get("_project_config", {}).get("validator_config", {})
@@ -690,7 +746,7 @@ def render_config_wizard(project: str) -> None:
                 "DeepSeek validator model",
                 value=validator_config.get("model", "deepseek-chat"),
             )
-            submitted = st.form_submit_button("Save voice settings", use_container_width=True)
+            submitted = st.form_submit_button("Save voice settings and continue", use_container_width=True)
             if submitted:
                 config["narration_style"] = split_lines(narration_style)
                 config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
@@ -699,6 +755,8 @@ def render_config_wizard(project: str) -> None:
                 }
                 save_config(project, config)
                 st.success("Voice settings saved.")
+                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+                rerun_app()
 
     elif step == 4:
         image_config = config.get("_project_config", {}).get("image_config", {})
@@ -710,22 +768,39 @@ def render_config_wizard(project: str) -> None:
                 height=220,
             )
             image_model = st.text_input("Image model", value=image_config.get("model", "seedream-v4"))
-            submitted = st.form_submit_button("Save visual settings", use_container_width=True)
+            submitted = st.form_submit_button("Save visual settings and continue", use_container_width=True)
             if submitted:
                 config["aesthetic_style"] = aesthetic_style.strip()
                 config["characters"] = parse_characters(characters)
                 config["_project_config"]["image_config"] = {"model": image_model.strip() or "seedream-v4"}
                 save_config(project, config)
                 st.success("Visual settings saved.")
+                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+                rerun_app()
 
     else:
-        st.markdown("Configuration file")
+        st.markdown("Saved configuration file")
         path = config_path(project)
         st.markdown(f"<div class='path-box'>{path}</div>", unsafe_allow_html=True)
+        if path.exists():
+            modified = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(path.stat().st_mtime))
+            st.caption(f"Last saved: {modified}")
+
+        warnings = config_warnings(config)
+        if warnings:
+            st.warning(
+                "This saved config still looks incomplete. Go back to the relevant step, "
+                "edit it, and press that step's Save and continue button."
+            )
+            for warning in warnings:
+                st.write(f"- {warning}")
+        else:
+            st.success("Saved config looks complete enough to run the pipeline.")
+
         st.json(config)
-        if st.button("Write config.json again", use_container_width=True):
-            save_config(project, config)
-            st.success("config.json written.")
+        st.caption("This page displays what is already saved on disk. It no longer overwrites config.json from stale defaults.")
+        if st.button("Reload from disk", use_container_width=True):
+            rerun_app()
 
     step_controls(len(steps))
 
@@ -893,5 +968,25 @@ def main() -> None:
         render_outputs(project)
 
 
+def running_inside_streamlit() -> bool:
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+def relaunch_with_streamlit() -> int:
+    command = [sys.executable, "-m", "streamlit", "run", str(Path(__file__).resolve())]
+    command.extend(sys.argv[1:])
+    print("Starting Streamlit app...")
+    print(" ".join(f'"{part}"' if " " in part else part for part in command))
+    return subprocess.run(command).returncode
+
+
 if __name__ == "__main__":
-    main()
+    if running_inside_streamlit():
+        main()
+    else:
+        raise SystemExit(relaunch_with_streamlit())
