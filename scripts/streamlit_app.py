@@ -43,17 +43,17 @@ IMAGE_MODEL_MAP = {
 }
 
 PIPELINE_STAGES = [
-    ("Generate Sections", "generate_sections.py"),
-    ("Validate Outline", "validate_outline.py"),
-    ("Generate Narration", "generate_script.py"),
-    ("Validate Narration", "validate_narration.py"),
-    ("Generate Image Prompts", "generate_image_prompts.py"),
+    ("Generate Sections", "generate_sections.py", "outline_texts.json"),
+    ("Validate Outline", "validate_outline.py", "outline_texts.json"),
+    ("Generate Narration", "generate_script.py", "narration.json"),
+    ("Validate Narration", "validate_narration.py", "narration.json"),
+    ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json"),
 ]
 
 FINISH_STAGES = [
-    ("Generate Audio", None),
-    ("Generate Clips", "generate_clips.py"),
-    ("Compose Final Video", "make_video.py"),
+    ("Generate Audio", None, "tts_index.json"),
+    ("Generate Clips", "generate_clips.py", "clips"),
+    ("Compose Final Video", "make_video.py", "videos"),
 ]
 
 
@@ -417,6 +417,62 @@ def run_script(script_name: str, project: str) -> tuple[int, str]:
     return return_code, full_log
 
 
+def verify_stage_artifact(project: str, expected: str | None) -> tuple[bool, str]:
+    if not expected:
+        return True, ""
+
+    if expected.endswith(".json"):
+        path = output_dir(project, "output_jsons") / expected
+        if not path.exists():
+            return False, f"Expected output was not created: {path}"
+        if path.stat().st_size <= 2:
+            return False, f"Expected output is empty: {path}"
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            return False, f"Expected output is not valid JSON: {path} ({exc})"
+
+        if expected == "outline_texts.json":
+            if not isinstance(data, list) or not data:
+                return False, f"outline_texts.json contains no sections: {path}"
+            for index, item in enumerate(data, start=1):
+                if not isinstance(item, dict):
+                    return False, f"outline_texts.json item {index} is not an object."
+                if not item.get("section_title") or not item.get("outline"):
+                    return False, f"outline_texts.json item {index} is missing section_title or outline."
+
+        if expected == "narration.json":
+            sections = data.get("sections", []) if isinstance(data, dict) else []
+            if not sections:
+                return False, f"narration.json contains no sections: {path}"
+
+        if expected == "image_prompts.json":
+            sections = data.get("sections", []) if isinstance(data, dict) else []
+            if not sections or not any(section.get("image_prompts") for section in sections):
+                return False, f"image_prompts.json contains no image prompts: {path}"
+
+        if expected == "tts_index.json":
+            if not isinstance(data, list) or not data:
+                return False, f"tts_index.json contains no audio entries: {path}"
+
+        return True, f"Verified output: {path}"
+
+    if expected == "clips":
+        path = output_dir(project, "clips")
+        if not any(path.glob("*.mp4")):
+            return False, f"No clip MP4 files found in: {path}"
+        return True, f"Verified clips in: {path}"
+
+    if expected == "videos":
+        path = output_dir(project, "videos")
+        if not any(path.glob("*.mp4")):
+            return False, f"No final MP4 files found in: {path}"
+        return True, f"Verified video in: {path}"
+
+    return True, ""
+
+
 def tts_script_for_config(config: dict) -> str:
     model = (
         config.get("_project_config", {})
@@ -430,11 +486,18 @@ def tts_script_for_config(config: dict) -> str:
     return "generate_kokoro_voice.py"
 
 
-def run_stage(project: str, label: str, script_name: str) -> None:
+def run_stage(project: str, label: str, script_name: str, expected_output: str | None = None) -> None:
     with st.spinner(f"Running {label}..."):
         code, log = run_script(script_name, project)
     if code == 0:
-        st.success(f"{label} completed.")
+        ok, message = verify_stage_artifact(project, expected_output)
+        if ok:
+            st.success(f"{label} completed. {message}")
+        else:
+            st.error(f"{label} finished but output validation failed.")
+            st.write(message)
+            with st.expander("Stage log", expanded=True):
+                st.code(log, language="text")
     else:
         st.error(f"{label} failed with exit code {code}.")
         with st.expander("Full log", expanded=True):
@@ -810,18 +873,18 @@ def render_pipeline(project: str) -> None:
     config = load_config(project)
 
     st.markdown("Run these first to prepare image review.")
-    for label, script in PIPELINE_STAGES:
+    for label, script, expected in PIPELINE_STAGES:
         st.markdown(f"<div class='stage-row'><strong>{label}</strong><br>{script}</div>", unsafe_allow_html=True)
         if st.button(f"Run {label}", key=f"run_{script}", use_container_width=True):
-            run_stage(project, label, script)
+            run_stage(project, label, script, expected)
 
     st.divider()
     st.markdown("After all images are approved, finish the video.")
-    for label, script in FINISH_STAGES:
+    for label, script, expected in FINISH_STAGES:
         actual_script = script or tts_script_for_config(config)
         st.markdown(f"<div class='stage-row'><strong>{label}</strong><br>{actual_script}</div>", unsafe_allow_html=True)
         if st.button(f"Run {label}", key=f"run_{label}", use_container_width=True):
-            run_stage(project, label, actual_script)
+            run_stage(project, label, actual_script, expected)
 
 
 def render_image_review(project: str) -> None:

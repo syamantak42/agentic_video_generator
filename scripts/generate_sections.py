@@ -288,6 +288,12 @@ def extract_keywords(client, guidelines_text):
     return [kw.strip().lower() for kw in re.split(r"[,\n]", keyword_text) if kw.strip()]
 
 
+def normalize_section_guidelines(raw_guidelines, expected_count):
+    """Normalize the user-provided section_outlines list without relying on labels."""
+    cleaned = [str(item).strip() for item in raw_guidelines if str(item).strip()]
+    return cleaned
+
+
 def tokenize(text):
     return [t for t in re.findall(r"[a-zA-Z][a-zA-Z'-]+", text.lower()) if len(t) > 2]
 
@@ -383,8 +389,13 @@ retrieval_model = SentenceTransformer(RETRIEVAL_MODEL, device="cpu")
 chunk_embeddings = retrieval_model.encode(chunks, normalize_embeddings=True, show_progress_bar=False)
 print(f"[OK] Embedded {len(chunks)} chunks for retrieval")
 
-section_guidelines = [s.strip() for s in description["section_outlines"] if s.strip().lower().startswith("section")]
+section_guidelines = normalize_section_guidelines(description.get("section_outlines", []), n_section)
 print(f"[INFO] Found {len(section_guidelines)} section guidelines")
+if not section_guidelines:
+    raise ValueError(
+        "No section guidelines found in config['section_outlines']. "
+        "Provide one outline instruction per desired section."
+    )
 if len(section_guidelines) != n_section:
     print(f"[WARN] n_section={n_section} but found {len(section_guidelines)} section guideline entries")
 
