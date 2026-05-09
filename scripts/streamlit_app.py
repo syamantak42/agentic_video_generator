@@ -44,7 +44,9 @@ IMAGE_MODEL_MAP = {
 
 PIPELINE_STAGES = [
     ("Generate Sections", "generate_sections.py"),
+    ("Validate Outline", "validate_outline.py"),
     ("Generate Narration", "generate_script.py"),
+    ("Validate Narration", "validate_narration.py"),
     ("Generate Image Prompts", "generate_image_prompts.py"),
 ]
 
@@ -224,6 +226,7 @@ def default_config(project: str) -> dict:
         "_project_config": {
             "project_name": project,
             "image_config": {"model": "seedream-v4"},
+            "validator_config": {"model": "deepseek-chat"},
             "tts_config": {"model": "kokoro", "voice_id": "af"},
         },
     }
@@ -670,6 +673,7 @@ def render_config_wizard(project: str) -> None:
 
     elif step == 3:
         tts_config = config.get("_project_config", {}).get("tts_config", {})
+        validator_config = config.get("_project_config", {}).get("validator_config", {})
         with st.form("voice_form"):
             narration_style = st.text_area(
                 "Narration style rules",
@@ -682,10 +686,17 @@ def render_config_wizard(project: str) -> None:
                 index=0 if tts_config.get("model", "kokoro").lower() != "inworld" else 1,
             )
             voice_id = st.text_input("Voice ID", value=tts_config.get("voice_id", "af"))
+            validator_model = st.text_input(
+                "DeepSeek validator model",
+                value=validator_config.get("model", "deepseek-chat"),
+            )
             submitted = st.form_submit_button("Save voice settings", use_container_width=True)
             if submitted:
                 config["narration_style"] = split_lines(narration_style)
                 config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
+                config["_project_config"]["validator_config"] = {
+                    "model": validator_model.strip() or "deepseek-chat"
+                }
                 save_config(project, config)
                 st.success("Voice settings saved.")
 

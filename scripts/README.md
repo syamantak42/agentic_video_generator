@@ -7,12 +7,14 @@ Generate a narrated video from source documents in a step-by-step pipeline.
 The pipeline:
 
 1. Builds section outlines from your source material
-2. Writes narration
-3. Creates image prompts
-4. Generates images
-5. Generates voice audio
-6. Turns images and audio into clips
-7. Combines the clips into a final video
+2. Validates and edits the outline JSON with DeepSeek
+3. Writes narration
+4. Validates and edits the narration JSON with DeepSeek
+5. Creates image prompts
+6. Generates images
+7. Generates voice audio
+8. Turns images and audio into clips
+9. Combines the clips into a final video
 
 ## Project Setup
 
@@ -62,6 +64,9 @@ Minimum example:
     "image_config": {
       "model": "seedream-v4"
     },
+    "validator_config": {
+      "model": "deepseek-chat"
+    },
     "tts_config": {
       "model": "kokoro",
       "voice_id": "af"
@@ -98,7 +103,9 @@ The pipeline pauses before each stage so you can continue, rerun, skip, or quit.
 
 ```bash
 python generate_sections.py YourProject
+python validate_outline.py YourProject
 python generate_script.py YourProject
+python validate_narration.py YourProject
 python generate_image_prompts.py YourProject
 python generate_images.py YourProject
 python generate_kokoro_voice.py YourProject

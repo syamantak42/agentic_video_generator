@@ -39,6 +39,9 @@
     "image_config": {
       "model": "seedream-v4"
     },
+    "validator_config": {
+      "model": "deepseek-chat"
+    },
     "tts_config": {
       "model": "kokoro",
       "voice_id": "af"

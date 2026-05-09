@@ -89,12 +89,14 @@ if __name__ == "__main__":
     # Define pipeline stages
     stages = [
         ("1. Generate Sections", "generate_sections.py"),
-        ("2. Generate Script (Narration)", "generate_script.py"),
-        ("3. Generate Image Prompts", "generate_image_prompts.py"),
-        ("4. Generate Images (Interactive)", "generate_images.py"),
-        ("5. Generate Audio (TTS)", f"generate_{tts_model}_voice.py"),
-        ("6. Generate Clips", "generate_clips.py"),
-        ("7. Compose Video", "make_video.py"),
+        ("2. Validate Outline", "validate_outline.py"),
+        ("3. Generate Script (Narration)", "generate_script.py"),
+        ("4. Validate Narration", "validate_narration.py"),
+        ("5. Generate Image Prompts", "generate_image_prompts.py"),
+        ("6. Generate Images (Interactive)", "generate_images.py"),
+        ("7. Generate Audio (TTS)", f"generate_{tts_model}_voice.py"),
+        ("8. Generate Clips", "generate_clips.py"),
+        ("9. Compose Video", "make_video.py"),
     ]
     
     completed_stages = []
