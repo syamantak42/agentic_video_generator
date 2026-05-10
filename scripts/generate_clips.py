@@ -27,9 +27,8 @@ import os
 import sys
 import json
 import re
-import math
 import subprocess
-import cv2
+import argparse
 from pydub import AudioSegment
 from console_utils import configure_utf8_output
 
@@ -39,6 +38,20 @@ configure_utf8_output()
 # --------------------------------------------------------
 # Helper: Get project name and paths from config
 # --------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate video clips from approved images and audio.")
+    parser.add_argument("project", help="Project name")
+    parser.add_argument(
+        "--clip-selection",
+        default="all",
+        help=(
+            "Clip selection: 'all', 'missing', a single key like '1_2', "
+            "a comma list like '1_1,2_3', or a range like '1_1-3_2'."
+        ),
+    )
+    return parser.parse_args()
+
+
 def load_project_config(project_arg=None):
     """Load project name and configuration from config.json.
 
@@ -68,8 +81,8 @@ def load_project_config(project_arg=None):
 # Main
 # ---------------------------------------------
 
-project = sys.argv[1] if len(sys.argv) > 1 else None
-project, source_dir, config = load_project_config(project)
+args = parse_args()
+project, source_dir, config = load_project_config(args.project)
 project_root = os.path.dirname(source_dir)
 
 # determine audio folder using tts model from config
@@ -126,6 +139,41 @@ def format_key(key):
     return f"{key[0]}_{key[1]}"
 
 
+def parse_clip_key(value):
+    match = re.match(r"^\s*(\d+)[_\-:](\d+)\s*$", value)
+    if not match:
+        raise ValueError(f"Invalid clip key: {value}. Use section_segment, e.g. 3_2.")
+    return int(match.group(1)), int(match.group(2))
+
+
+def select_clip_keys(selection, available_keys, clips_dir):
+    """Resolve a clip-selection string into sorted media keys."""
+    selection = (selection or "all").strip().lower()
+    available = sorted(available_keys)
+
+    if selection == "all":
+        return available
+
+    if selection == "missing":
+        existing_clips = collect_media_files(clips_dir, "image", [".mp4"])
+        return sorted(set(available) - set(existing_clips))
+
+    if "-" in selection and "," not in selection:
+        start_text, end_text = selection.split("-", 1)
+        start_key = parse_clip_key(start_text)
+        end_key = parse_clip_key(end_text)
+        if start_key > end_key:
+            start_key, end_key = end_key, start_key
+        return [key for key in available if start_key <= key <= end_key]
+
+    requested = [parse_clip_key(part) for part in selection.split(",") if part.strip()]
+    missing_requested = sorted(set(requested) - set(available))
+    if missing_requested:
+        missing_text = ", ".join(format_key(key) for key in missing_requested)
+        raise ValueError(f"Requested clips do not have matching image/audio pairs: {missing_text}")
+    return sorted(dict.fromkeys(requested))
+
+
 def cleanup_moviepy_temp_files(*directories):
     """Remove stale MoviePy temp audio files created by interrupted runs."""
     temp_pattern = re.compile(r".*TEMP_MPY_wvf_snd\.(mp3|mp4|m4a|wav)$", re.IGNORECASE)
@@ -169,8 +217,13 @@ if missing_audio or missing_images:
         "Expected matching image_<section>_<segment> and audio_<section>_<segment> files."
     )
 
-media_keys = sorted(image_keys)
-print(f"Found {len(media_keys)} matched image/audio pairs")
+media_keys = select_clip_keys(args.clip_selection, sorted(image_keys), clips_dir)
+if not media_keys:
+    print(f"No clips selected for generation ({args.clip_selection}).")
+    raise SystemExit(0)
+
+print(f"Found {len(image_keys)} matched image/audio pairs")
+print(f"Selected {len(media_keys)} clips for generation: {', '.join(format_key(key) for key in media_keys)}")
 
 # compute durations using pydub
 fps = 24
@@ -195,28 +248,24 @@ def get_ffmpeg_binary():
         return "ffmpeg"
 
 
-def make_zoom_frame(img, t, duration, zoom_start=1.0, zoom_end=1.4):
-    """Create one RGB zoom frame from an already-loaded image."""
-    h, w, _ = img.shape
-    progress = min(1.0, max(0.0, t / max(duration, 0.001)))
-    zoom = zoom_start + (zoom_end - zoom_start) * progress
-    center = (w // 2, h // 2)
-    size = (int(w / zoom), int(h / zoom))
-    cropped = img[
-        center[1] - size[1] // 2 : center[1] + size[1] // 2,
-        center[0] - size[0] // 2 : center[0] + size[0] // 2
-    ]
-    return cv2.resize(cropped, (w, h))
-
-
 def render_zoom_clip(image_path, audio_path, duration, output_path, fps=24):
-    """Stream generated RGB frames into ffmpeg and mux them with audio."""
-    img = cv2.imread(image_path)
-    if img is None:
-        raise RuntimeError(f"Could not read image file: {image_path}")
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    h, w, _ = img.shape
-    frame_count = max(1, math.ceil(duration * fps))
+    """Use ffmpeg's zoompan filter to animate one still image with audio."""
+    if not os.path.exists(image_path):
+        raise RuntimeError(f"Image file not found: {image_path}")
+    if not os.path.exists(audio_path):
+        raise RuntimeError(f"Audio file not found: {audio_path}")
+
+    frame_count = max(1, int(round(duration * fps)))
+    zoom_increment = (1.4 - 1.0) / frame_count
+    zoom_filter = (
+        "scale=2048:1152:force_original_aspect_ratio=increase,"
+        "crop=2048:1152,"
+        f"zoompan=z='min(zoom+{zoom_increment:.8f},1.4)':"
+        "x='iw/2-(iw/zoom/2)':"
+        "y='ih/2-(ih/zoom/2)':"
+        f"d=1:s=2048x1152:fps={fps},"
+        "format=yuv420p"
+    )
 
     command = [
         get_ffmpeg_binary(),
@@ -224,20 +273,18 @@ def render_zoom_clip(image_path, audio_path, duration, output_path, fps=24):
         "-hide_banner",
         "-loglevel",
         "error",
-        "-f",
-        "rawvideo",
-        "-vcodec",
-        "rawvideo",
-        "-pix_fmt",
-        "rgb24",
-        "-s",
-        f"{w}x{h}",
-        "-r",
+        "-loop",
+        "1",
+        "-framerate",
         str(fps),
         "-i",
-        "-",
+        image_path,
         "-i",
         audio_path,
+        "-t",
+        f"{duration:.3f}",
+        "-vf",
+        zoom_filter,
         "-map",
         "0:v:0",
         "-map",
@@ -245,11 +292,9 @@ def render_zoom_clip(image_path, audio_path, duration, output_path, fps=24):
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "veryfast",
         "-threads",
         "2",
-        "-pix_fmt",
-        "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
@@ -260,32 +305,11 @@ def render_zoom_clip(image_path, audio_path, duration, output_path, fps=24):
         output_path,
     ]
 
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-
-    try:
-        assert process.stdin is not None
-        for frame_index in range(frame_count):
-            frame = make_zoom_frame(img, frame_index / fps, duration)
-            process.stdin.write(frame.tobytes())
-    except BrokenPipeError:
-        pass
-    finally:
-        if process.stdin is not None:
-            try:
-                process.stdin.close()
-            except OSError:
-                pass
-
-    stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
-    return_code = process.wait()
-    if return_code != 0:
+    result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace")
         raise RuntimeError(
-            f"ffmpeg failed with exit code {return_code} while writing {output_path}.\n{stderr.strip()}"
+            f"ffmpeg failed with exit code {result.returncode} while writing {output_path}.\n{stderr.strip()}"
         )
 
 # create clips

@@ -51,12 +51,6 @@ NARRATION_STAGES = [
     ("Generate Audio", None, "tts_index.json"),
 ]
 
-VIDEO_STAGES = [
-    ("Generate Clips", "generate_clips.py", "clips"),
-    ("Compose Final Video", "make_video.py", "videos"),
-]
-
-
 def inject_css() -> None:
     st.markdown(
         """
@@ -494,10 +488,13 @@ def progress_message_from_line(line: str) -> str:
     return ""
 
 
-def run_script(script_name: str, project: str) -> tuple[int, str]:
+def run_script(script_name: str, project: str, extra_args: list[str] | None = None) -> tuple[int, str]:
     script_path = SCRIPT_DIR / script_name
+    command = [sys.executable, str(script_path), project]
+    if extra_args:
+        command.extend(extra_args)
     process = subprocess.Popen(
-        [sys.executable, str(script_path), project],
+        command,
         cwd=str(SCRIPT_DIR),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -572,7 +569,42 @@ def media_keys_in_dir(path: Path, prefix: str, extensions: tuple[str, ...]) -> s
     return keys
 
 
-def verify_stage_artifact(project: str, expected: str | None) -> tuple[bool, str]:
+def format_media_key(key: tuple[int, int]) -> str:
+    return f"{key[0]}_{key[1]}"
+
+
+def parse_media_key_text(value: str) -> tuple[int, int]:
+    match = re.match(r"^\s*(\d+)[_\-:](\d+)\s*$", value)
+    if not match:
+        raise ValueError(f"Invalid clip key: {value}. Use section_segment, e.g. 3_2.")
+    return int(match.group(1)), int(match.group(2))
+
+
+def parse_clip_selection_text(selection: str, available_keys: set[tuple[int, int]]) -> set[tuple[int, int]]:
+    selection = selection.strip().lower()
+    available = sorted(available_keys)
+    if selection == "all":
+        return set(available)
+    if "-" in selection and "," not in selection:
+        start_text, end_text = selection.split("-", 1)
+        start_key = parse_media_key_text(start_text)
+        end_key = parse_media_key_text(end_text)
+        if start_key > end_key:
+            start_key, end_key = end_key, start_key
+        return {key for key in available if start_key <= key <= end_key}
+    requested = {parse_media_key_text(part) for part in selection.split(",") if part.strip()}
+    missing = requested - set(available)
+    if missing:
+        missing_text = ", ".join(format_media_key(key) for key in sorted(missing))
+        raise ValueError(f"Requested clips do not have matching image/audio pairs: {missing_text}")
+    return requested
+
+
+def verify_stage_artifact(
+    project: str,
+    expected: str | None,
+    expected_clip_keys: set[tuple[int, int]] | None = None,
+) -> tuple[bool, str]:
     if not expected:
         return True, ""
 
@@ -617,15 +649,18 @@ def verify_stage_artifact(project: str, expected: str | None) -> tuple[bool, str
         path = output_dir(project, "clips")
         image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
         clip_keys = media_keys_in_dir(path, "image", (".mp4",))
+        keys_to_check = expected_clip_keys if expected_clip_keys is not None else image_keys
         if not image_keys:
             return False, f"No approved image files found in: {output_dir(project, 'images')}"
+        if not keys_to_check:
+            return True, f"No selected clips needed generation in: {path}"
         if not clip_keys:
             return False, f"No clip MP4 files found in: {path}"
-        missing = sorted(image_keys - clip_keys)
+        missing = sorted(keys_to_check - clip_keys)
         if missing:
             missing_text = ", ".join(f"{section}_{segment}" for section, segment in missing)
             return False, f"Missing clip MP4 files for image keys: {missing_text}"
-        return True, f"Verified {len(image_keys)} clips in: {path}"
+        return True, f"Verified {len(keys_to_check)} selected clips in: {path}"
 
     if expected == "videos":
         path = output_dir(project, "videos")
@@ -649,11 +684,22 @@ def tts_script_for_config(config: dict) -> str:
     return "generate_kokoro_voice.py"
 
 
-def run_stage(project: str, label: str, script_name: str, expected_output: str | None = None) -> None:
+def run_stage(
+    project: str,
+    label: str,
+    script_name: str,
+    expected_output: str | None = None,
+    extra_args: list[str] | None = None,
+    expected_clip_keys: set[tuple[int, int]] | None = None,
+) -> None:
     with st.spinner(f"Running {label}..."):
-        code, log = run_script(script_name, project)
+        code, log = run_script(script_name, project, extra_args=extra_args)
     if code == 0:
-        ok, message = verify_stage_artifact(project, expected_output)
+        ok, message = verify_stage_artifact(
+            project,
+            expected_output,
+            expected_clip_keys=expected_clip_keys,
+        )
         if ok:
             location = artifact_location(project, expected_output)
             st.success(stage_success_text(label, expected_output))
@@ -1068,10 +1114,95 @@ def render_video_generation(project: str) -> None:
     st.subheader("Video Generation")
 
     st.markdown("After image review is complete, generate segment clips and compose the final video.")
-    for label, script, expected in VIDEO_STAGES:
-        st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
-        if st.button(f"Run {label}", key=f"run_{script}", width="stretch"):
-            run_stage(project, label, script, expected)
+
+    image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
+    audio_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
+    matched_keys = set(sorted(image_keys & audio_keys))
+    existing_clip_keys = media_keys_in_dir(output_dir(project, "clips"), "image", (".mp4",))
+    missing_clip_keys = matched_keys - existing_clip_keys
+    key_options = sorted(matched_keys)
+    key_labels = [format_media_key(key) for key in key_options]
+    key_by_label = dict(zip(key_labels, key_options))
+
+    if image_keys - audio_keys:
+        st.warning(
+            "Some approved images do not have matching audio: "
+            + ", ".join(format_media_key(key) for key in sorted(image_keys - audio_keys))
+        )
+    if audio_keys - image_keys:
+        st.warning(
+            "Some audio files do not have matching approved images: "
+            + ", ".join(format_media_key(key) for key in sorted(audio_keys - image_keys))
+        )
+
+    st.markdown("<div class='stage-row'><strong>Generate Clips</strong></div>", unsafe_allow_html=True)
+    clip_mode = st.radio(
+        "Clip selection",
+        ["Missing clips", "All clips", "Range", "Specific clips"],
+        horizontal=True,
+    )
+
+    selected_clip_keys: set[tuple[int, int]] = set()
+    clip_selection_arg = "missing"
+    selection_error = ""
+
+    if clip_mode == "Missing clips":
+        selected_clip_keys = set(missing_clip_keys)
+        clip_selection_arg = "missing"
+        if selected_clip_keys:
+            st.caption(
+                "Will generate missing clips: "
+                + ", ".join(format_media_key(key) for key in sorted(selected_clip_keys))
+            )
+        else:
+            st.info("All matched clips already exist.")
+    elif clip_mode == "All clips":
+        selected_clip_keys = set(matched_keys)
+        clip_selection_arg = "all"
+    elif clip_mode == "Range":
+        if key_options:
+            range_cols = st.columns(2)
+            with range_cols[0]:
+                start_label = st.selectbox("Start clip", key_labels, index=0)
+            with range_cols[1]:
+                end_label = st.selectbox("End clip", key_labels, index=len(key_labels) - 1)
+            start_key = key_by_label[start_label]
+            end_key = key_by_label[end_label]
+            if start_key > end_key:
+                start_key, end_key = end_key, start_key
+            selected_clip_keys = {key for key in matched_keys if start_key <= key <= end_key}
+            clip_selection_arg = f"{format_media_key(start_key)}-{format_media_key(end_key)}"
+        else:
+            selection_error = "No matched image/audio pairs are available."
+    else:
+        default_labels = [format_media_key(key) for key in sorted(missing_clip_keys)] or key_labels[:1]
+        selected_labels = st.multiselect(
+            "Specific clips",
+            key_labels,
+            default=default_labels,
+        )
+        selected_clip_keys = {key_by_label[label] for label in selected_labels}
+        clip_selection_arg = ",".join(format_media_key(key) for key in sorted(selected_clip_keys))
+        if not selected_clip_keys:
+            selection_error = "Select at least one clip."
+
+    if selection_error:
+        st.error(selection_error)
+
+    can_generate_clips = bool(matched_keys) and not selection_error and bool(selected_clip_keys)
+    if st.button("Run Generate Clips", key="run_generate_clips_selected", width="stretch", disabled=not can_generate_clips):
+        run_stage(
+            project,
+            "Generate Clips",
+            "generate_clips.py",
+            "clips",
+            extra_args=["--clip-selection", clip_selection_arg],
+            expected_clip_keys=selected_clip_keys,
+        )
+
+    st.markdown("<div class='stage-row'><strong>Compose Final Video</strong></div>", unsafe_allow_html=True)
+    if st.button("Run Compose Final Video", key="run_make_video.py", width="stretch"):
+        run_stage(project, "Compose Final Video", "make_video.py", "videos")
 
 
 def render_image_review(project: str) -> None:
