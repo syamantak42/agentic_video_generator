@@ -4,7 +4,7 @@ MARKER_DEFINITIONS:
 The user message is a structured block with uppercase markers. Interpret them exactly as follows.
 
 - `NARRATION_TEXT:` contains the ONLY subject of the image prompt. Visualize this text and nothing else.
-- `FRAMES_TO_AVOID:` lists earlier visual scenes. These are negative examples. Make the new prompt as distinct from them as possible.
+- `FRAMES_TO_AVOID:` These are negative examples. Make the new prompt as distinct from them as possible.
 - `CHARACTER_CANON:` contains fixed character details from this system prompt. Use it only when a canon character is needed by `NARRATION_TEXT:`.
 
 CRITICAL_PRIORITY:

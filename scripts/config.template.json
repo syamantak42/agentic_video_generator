@@ -39,6 +39,9 @@
     "image_config": {
       "model": "seedream-v4"
     },
+    "narration_config": {
+      "words_per_section": 400
+    },
     "validator_config": {
       "model": "deepseek-chat"
     },

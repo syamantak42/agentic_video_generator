@@ -1,4 +1,4 @@
-"""Streamlit app for the agentic video generator pipeline.
+"""Streamlit app for the agentic video generator workspace.
 
 Run from the repo root or scripts folder with:
     streamlit run scripts/streamlit_app.py
@@ -42,16 +42,16 @@ IMAGE_MODEL_MAP = {
     "seedream_v4": "fal-ai/bytedance/seedream/v4/text-to-image",
 }
 
-PIPELINE_STAGES = [
+NARRATION_STAGES = [
     ("Generate Sections", "generate_sections.py", "outline_texts.json"),
     ("Validate Outline", "validate_outline.py", "outline_texts.json"),
     ("Generate Narration", "generate_script.py", "narration.json"),
     ("Validate Narration", "validate_narration.py", "narration.json"),
     ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json"),
+    ("Generate Audio", None, "tts_index.json"),
 ]
 
-FINISH_STAGES = [
-    ("Generate Audio", None, "tts_index.json"),
+VIDEO_STAGES = [
     ("Generate Clips", "generate_clips.py", "clips"),
     ("Compose Final Video", "make_video.py", "videos"),
 ]
@@ -62,26 +62,36 @@ def inject_css() -> None:
         """
         <style>
         :root {
-            --surface: #ffffff;
-            --ink: #14213d;
-            --muted: #58708a;
-            --line: #d8e5f2;
-            --accent: #0077b6;
-            --accent-2: #00a896;
-            --accent-soft: #e0f7fa;
-            --warn-soft: #fff3c4;
-            --page: #f4fbff;
+            --surface: #101c2f;
+            --surface-2: #16263f;
+            --ink: #f3fbff;
+            --muted: #afd0e8;
+            --line: #2e496d;
+            --accent: #6d28d9;
+            --accent-2: #be123c;
+            --accent-3: #ffd166;
+            --accent-soft: rgba(32, 227, 178, .16);
+            --warn-soft: rgba(255, 209, 102, .18);
+            --page: #07111f;
         }
 
         .stApp {
             background:
-                linear-gradient(180deg, #f0fbff 0%, #ffffff 46%, #f7fbff 100%);
+                radial-gradient(circle at top left, rgba(76, 201, 240, .22), transparent 34%),
+                linear-gradient(180deg, #07111f 0%, #0b1628 48%, #08111f 100%);
+            color: var(--ink);
         }
 
         .block-container {
             padding-top: 2rem;
             padding-bottom: 4rem;
             max-width: 1180px;
+            font-size: 1.247rem;
+        }
+
+        .stMarkdown, .stText, .stCaption, p, label, div[data-testid="stMarkdownContainer"] {
+            color: var(--ink);
+            font-size: 1.197rem;
         }
 
         h1, h2, h3 {
@@ -89,19 +99,23 @@ def inject_css() -> None:
             letter-spacing: 0;
         }
 
+        h2, h3 {
+            font-size: 1.917rem;
+        }
+
         .app-hero {
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 22px 24px;
             background:
-                linear-gradient(135deg, rgba(0, 168, 150, .16) 0%, rgba(0, 119, 182, .10) 45%, #ffffff 100%);
+                linear-gradient(135deg, rgba(32, 227, 178, .24) 0%, rgba(76, 201, 240, .18) 52%, rgba(255, 209, 102, .12) 100%);
             margin-bottom: 18px;
-            box-shadow: 0 10px 30px rgba(20, 33, 61, .06);
+            box-shadow: 0 16px 42px rgba(0, 0, 0, .25);
         }
 
         .app-hero h1 {
             margin: 0;
-            font-size: 2rem;
+            font-size: 2.617rem;
             line-height: 1.15;
         }
 
@@ -109,6 +123,7 @@ def inject_css() -> None:
             color: var(--muted);
             margin: 8px 0 0 0;
             max-width: 760px;
+            font-size: 1.287rem;
         }
 
         .metric-card {
@@ -116,12 +131,12 @@ def inject_css() -> None:
             border-radius: 8px;
             padding: 14px 16px;
             background: var(--surface);
-            box-shadow: 0 6px 18px rgba(20, 33, 61, .05);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, .22);
         }
 
         .metric-label {
             color: var(--muted);
-            font-size: .82rem;
+            font-size: 1.067rem;
             text-transform: uppercase;
             letter-spacing: .04em;
         }
@@ -129,51 +144,97 @@ def inject_css() -> None:
         .metric-value {
             color: var(--ink);
             font-weight: 700;
-            font-size: 1.2rem;
+            font-size: 1.447rem;
             margin-top: 4px;
         }
 
         .path-box {
-            background: #f6f8fa;
+            background: #07111f;
             border: 1px solid var(--line);
             border-radius: 6px;
             padding: 10px 12px;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: .84rem;
+            font-size: 1.117rem;
+            color: #d8f3ff;
             word-break: break-all;
         }
 
         .stage-row {
             border: 1px solid var(--line);
             border-radius: 8px;
-            padding: 14px 16px;
+            padding: 16px 18px;
             background: var(--surface);
             margin-bottom: 10px;
-            box-shadow: 0 6px 18px rgba(20, 33, 61, .04);
+            box-shadow: 0 12px 26px rgba(0, 0, 0, .20);
+            color: var(--ink);
+            font-size: 1.217rem;
         }
 
         .ok-pill, .wait-pill {
             border-radius: 999px;
-            padding: 3px 9px;
-            font-size: .8rem;
+            padding: 5px 11px;
+            font-size: 1.067rem;
+            font-weight: 800;
             display: inline-block;
         }
 
         .ok-pill {
             background: var(--accent-soft);
-            color: var(--accent);
+            color: #7dffd8;
         }
 
         div.stButton > button[kind="primary"],
-        div.stFormSubmitButton > button {
+        div.stFormSubmitButton > button,
+        div.stButton > button,
+        div.stDownloadButton > button {
             background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
             color: #ffffff;
-            border: 0;
+            border: 1px solid rgba(255, 255, 255, .12);
+            font-size: 1.227rem;
+            font-weight: 850;
+            min-height: 2.8rem;
+        }
+
+        div.stButton > button:disabled {
+            background: #263a57;
+            color: #88a5bd;
+            border-color: #385372;
         }
 
         .wait-pill {
             background: var(--warn-soft);
-            color: #8a5a00;
+            color: #ffe39a;
+        }
+
+        section[data-testid="stSidebar"] {
+            background: #091426;
+            border-right: 1px solid var(--line);
+        }
+
+        div[data-testid="stAlert"] {
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        div[data-baseweb="input"],
+        div[data-baseweb="textarea"],
+        div[data-baseweb="select"] {
+            font-size: 1.187rem;
+        }
+
+        header[data-testid="stHeader"],
+        div[data-testid="stToolbar"],
+        div[data-testid="stStatusWidget"],
+        div[data-testid="stDecoration"] {
+            background: #07111f !important;
+            color: var(--ink) !important;
+        }
+
+        header[data-testid="stHeader"] *,
+        div[data-testid="stToolbar"] *,
+        div[data-testid="stStatusWidget"] * {
+            background-color: #07111f !important;
+            color: var(--ink) !important;
         }
         </style>
         """,
@@ -251,10 +312,30 @@ def default_config(project: str) -> dict:
         "_project_config": {
             "project_name": project,
             "image_config": {"model": "seedream-v4"},
+            "narration_config": {"words_per_section": 400},
             "validator_config": {"model": "deepseek-chat"},
             "tts_config": {"model": "kokoro", "voice_id": "af"},
         },
     }
+
+
+def ensure_config_defaults(config: dict, project: str) -> dict:
+    project_config = config.setdefault("_project_config", {})
+    project_config.setdefault("project_name", project)
+    if not isinstance(project_config.get("image_config"), dict):
+        project_config["image_config"] = {"model": "seedream-v4"}
+    if not isinstance(project_config.get("narration_config"), dict):
+        project_config["narration_config"] = {"words_per_section": 400}
+    if not isinstance(project_config.get("validator_config"), dict):
+        project_config["validator_config"] = {"model": "deepseek-chat"}
+    if not isinstance(project_config.get("tts_config"), dict):
+        project_config["tts_config"] = {"model": "kokoro", "voice_id": "af"}
+    project_config["image_config"].setdefault("model", "seedream-v4")
+    project_config["narration_config"].setdefault("words_per_section", 400)
+    project_config["validator_config"].setdefault("model", "deepseek-chat")
+    project_config["tts_config"].setdefault("model", "kokoro")
+    project_config["tts_config"].setdefault("voice_id", "af")
+    return config
 
 
 def config_path(project: str) -> Path:
@@ -266,13 +347,13 @@ def load_config(project: str) -> dict:
     if path.exists():
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        data.setdefault("_project_config", {}).setdefault("project_name", project)
-        return data
-    return default_config(project)
+        return ensure_config_defaults(data, project)
+    return ensure_config_defaults(default_config(project), project)
 
 
 def save_config(project: str, config: dict) -> Path:
     ensure_project_dirs(project)
+    config = ensure_config_defaults(config, project)
     config["_project_config"]["project_name"] = project
     path = config_path(project)
     with path.open("w", encoding="utf-8") as f:
@@ -391,6 +472,28 @@ def config_warnings(config: dict) -> list[str]:
     return warnings
 
 
+def progress_message_from_line(line: str) -> str:
+    patterns = [
+        (
+            r"Generating narration section\s+(\d+)\s*/\s*(\d+)",
+            "Generating narration section {current} of {total}",
+        ),
+        (
+            r"Generating image prompt\s+(\d+)\s*/\s*(\d+)",
+            "Generating image prompt {current} of {total}",
+        ),
+        (
+            r"Generating clip\s+(\d+)\s*/\s*(\d+)",
+            "Generating clip {current} of {total}",
+        ),
+    ]
+    for pattern, template in patterns:
+        match = re.search(pattern, line, flags=re.IGNORECASE)
+        if match:
+            return template.format(current=match.group(1), total=match.group(2))
+    return ""
+
+
 def run_script(script_name: str, project: str) -> tuple[int, str]:
     script_path = SCRIPT_DIR / script_name
     process = subprocess.Popen(
@@ -405,16 +508,68 @@ def run_script(script_name: str, project: str) -> tuple[int, str]:
     )
 
     lines: list[str] = []
-    log_box = st.empty()
+    progress_box = st.empty()
 
     assert process.stdout is not None
     for line in process.stdout:
-        lines.append(line.rstrip())
-        log_box.code("\n".join(lines[-120:]), language="text")
+        line = line.rstrip()
+        lines.append(line)
+        progress_message = progress_message_from_line(line)
+        if progress_message:
+            progress_box.info(progress_message)
 
     return_code = process.wait()
+    progress_box.empty()
     full_log = "\n".join(lines)
     return return_code, full_log
+
+
+def artifact_location(project: str, expected: str | None) -> Path | None:
+    if not expected:
+        return None
+    if expected.endswith(".json"):
+        return output_dir(project, "output_jsons") / expected
+    if expected == "clips":
+        return output_dir(project, "clips")
+    if expected == "videos":
+        return output_dir(project, "videos")
+    return None
+
+
+def stage_success_text(label: str, expected: str | None) -> str:
+    if expected == "outline_texts.json":
+        return "Outline generated." if "Generate" in label else "Outline validated."
+    if expected == "narration.json":
+        return "Narration generated." if "Generate" in label else "Narration validated."
+    if expected == "image_prompts.json":
+        return "Image prompts generated."
+    if expected == "tts_index.json":
+        return "Audio clips generated."
+    if expected == "clips":
+        return "Video clips generated."
+    if expected == "videos":
+        return "Final video generated."
+    return f"{label} completed."
+
+
+def media_key_from_name(path: Path, prefix: str) -> tuple[int, int] | None:
+    match = re.match(rf"^{re.escape(prefix)}_(\d+)_(\d+)$", path.stem, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def media_keys_in_dir(path: Path, prefix: str, extensions: tuple[str, ...]) -> set[tuple[int, int]]:
+    keys: set[tuple[int, int]] = set()
+    if not path.exists():
+        return keys
+    for item in path.iterdir():
+        if not item.is_file() or item.suffix.lower() not in extensions:
+            continue
+        key = media_key_from_name(item, prefix)
+        if key is not None:
+            keys.add(key)
+    return keys
 
 
 def verify_stage_artifact(project: str, expected: str | None) -> tuple[bool, str]:
@@ -460,9 +615,17 @@ def verify_stage_artifact(project: str, expected: str | None) -> tuple[bool, str
 
     if expected == "clips":
         path = output_dir(project, "clips")
-        if not any(path.glob("*.mp4")):
+        image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
+        clip_keys = media_keys_in_dir(path, "image", (".mp4",))
+        if not image_keys:
+            return False, f"No approved image files found in: {output_dir(project, 'images')}"
+        if not clip_keys:
             return False, f"No clip MP4 files found in: {path}"
-        return True, f"Verified clips in: {path}"
+        missing = sorted(image_keys - clip_keys)
+        if missing:
+            missing_text = ", ".join(f"{section}_{segment}" for section, segment in missing)
+            return False, f"Missing clip MP4 files for image keys: {missing_text}"
+        return True, f"Verified {len(image_keys)} clips in: {path}"
 
     if expected == "videos":
         path = output_dir(project, "videos")
@@ -492,16 +655,21 @@ def run_stage(project: str, label: str, script_name: str, expected_output: str |
     if code == 0:
         ok, message = verify_stage_artifact(project, expected_output)
         if ok:
-            st.success(f"{label} completed. {message}")
+            location = artifact_location(project, expected_output)
+            st.success(stage_success_text(label, expected_output))
+            if location:
+                st.markdown(f"<div class='path-box'>{location}</div>", unsafe_allow_html=True)
         else:
             st.error(f"{label} finished but output validation failed.")
             st.write(message)
-            with st.expander("Stage log", expanded=True):
-                st.code(log, language="text")
+            recent_log = "\n".join(log.splitlines()[-40:])
+            with st.expander("Recent log output", expanded=False):
+                st.code(recent_log or "No log output captured.", language="text")
     else:
         st.error(f"{label} failed with exit code {code}.")
-        with st.expander("Full log", expanded=True):
-            st.code(log, language="text")
+        recent_log = "\n".join(log.splitlines()[-40:])
+        with st.expander("Recent log output", expanded=False):
+            st.code(recent_log or "No log output captured.", language="text")
 
 
 def load_image_prompt_items(project: str) -> list[dict]:
@@ -552,17 +720,6 @@ def generate_image_with_fal(prompt: str, config: dict) -> Image.Image:
         raise RuntimeError("Missing FAL_KEY in the repo .env file.")
     os.environ["FAL_KEY"] = fal_key
 
-    logs: list[str] = []
-    log_box = st.empty()
-
-    def on_queue_update(update):
-        if isinstance(update, fal_client.InProgress):
-            for log in update.logs:
-                message = log.get("message", "")
-                if message:
-                    logs.append(message)
-                    log_box.code("\n".join(logs[-20:]), language="text")
-
     result = fal_client.subscribe(
         image_model_for_config(config),
         arguments={
@@ -573,8 +730,7 @@ def generate_image_with_fal(prompt: str, config: dict) -> Image.Image:
             "enable_safety_checker": False,
             "enhance_prompt_mode": "standard",
         },
-        with_logs=True,
-        on_queue_update=on_queue_update,
+        with_logs=False,
     )
 
     if "images" not in result or not result["images"]:
@@ -606,6 +762,8 @@ def init_state() -> None:
     st.session_state.setdefault("active_review_index", 0)
     st.session_state.setdefault("active_review_path", "")
     st.session_state.setdefault("active_prompt_text", "")
+    st.session_state.setdefault("image_review_notice", "")
+    st.session_state.setdefault("image_review_notice_kind", "success")
     st.session_state.setdefault("link_results", [])
 
 
@@ -616,12 +774,18 @@ def rerun_app() -> None:
         st.experimental_rerun()
 
 
+def set_active_review_index(index: int, item_count: int) -> None:
+    st.session_state.active_review_index = max(0, min(item_count - 1, index))
+    st.session_state.active_review_path = ""
+    st.session_state.active_prompt_text = ""
+
+
 def render_header() -> None:
     st.markdown(
         """
         <div class="app-hero">
             <h1>Agentic Video Generator</h1>
-            <p>Build the project config, gather source material, run the pipeline, review generated images, and compose the final video from one guided workspace.</p>
+            <p>Build the project config, generate narration and audio, review images, and compose the final video from one guided workspace.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -637,7 +801,7 @@ def render_project_selector() -> str:
         raw_name = st.sidebar.text_input("New project name", value=st.session_state.selected_project or "NewProject")
         try:
             project = sanitize_project_name(raw_name)
-            if st.sidebar.button("Create / open project", use_container_width=True):
+            if st.sidebar.button("Create / open project", width="stretch"):
                 ensure_project_dirs(project)
                 if not config_path(project).exists():
                     save_config(project, default_config(project))
@@ -711,7 +875,7 @@ def render_config_wizard(project: str) -> None:
             n_section = st.number_input("Number of sections", min_value=1, max_value=30, value=int(config.get("n_section", 6)))
             historical_context = st.text_area("Historical or subject context", value=config.get("historical_context", ""), height=110)
 
-            submitted = st.form_submit_button("Save basics and continue", use_container_width=True)
+            submitted = st.form_submit_button("Save basics and continue", width="stretch")
             if submitted:
                 config["video_title"] = title.strip()
                 config["n_section"] = int(n_section)
@@ -728,7 +892,7 @@ def render_config_wizard(project: str) -> None:
         with st.form("outline_form"):
             st.caption("Write one section guideline per line. The generation script will turn these into structured sections.")
             updated = st.text_area("Section guidelines", value=outline_text, height=340)
-            submitted = st.form_submit_button("Save outline and continue", use_container_width=True)
+            submitted = st.form_submit_button("Save outline and continue", width="stretch")
             if submitted:
                 config["section_outlines"] = split_lines(updated)
                 config["n_section"] = len(config["section_outlines"])
@@ -740,7 +904,7 @@ def render_config_wizard(project: str) -> None:
     elif step == 2:
         st.caption("PDF and TXT links are downloaded into source_material. HTML and Wikipedia links stay as reference links for retrieval.")
         uploaded = st.file_uploader("Upload PDFs or TXT files", type=["pdf", "txt"], accept_multiple_files=True)
-        if st.button("Save uploaded files", use_container_width=True):
+        if st.button("Save uploaded files", width="stretch"):
             saved = save_uploaded_sources(project, uploaded)
             material = list(dict.fromkeys(config.get("source_material", []) + saved))
             config["source_material"] = material
@@ -749,7 +913,7 @@ def render_config_wizard(project: str) -> None:
             st.success(f"Saved {len(saved)} uploaded source files.")
 
         link_text = st.text_area("Reference links or downloadable PDF/TXT links", value="\n".join(config.get("reference_links", [])), height=180)
-        if st.button("Process links and save", use_container_width=True):
+        if st.button("Process links and save", width="stretch"):
             references: list[str] = []
             downloaded: list[str] = []
             results: list[str] = []
@@ -784,7 +948,7 @@ def render_config_wizard(project: str) -> None:
             files = sorted(p.name for p in source_dir(project).glob("*") if p.is_file())
             st.code("\n".join(files) if files else "No files yet.", language="text")
 
-        if st.button("Save source links and continue", use_container_width=True):
+        if st.button("Save source links and continue", width="stretch"):
             config["reference_links"] = list(dict.fromkeys(split_lines(link_text)))
             save_config(project, config)
             st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
@@ -793,11 +957,19 @@ def render_config_wizard(project: str) -> None:
     elif step == 3:
         tts_config = config.get("_project_config", {}).get("tts_config", {})
         validator_config = config.get("_project_config", {}).get("validator_config", {})
+        narration_config = config.get("_project_config", {}).get("narration_config", {})
         with st.form("voice_form"):
             narration_style = st.text_area(
                 "Narration style rules",
                 value="\n".join(config.get("narration_style", [])),
                 height=190,
+            )
+            words_per_section = st.number_input(
+                "Tentative words per section",
+                min_value=100,
+                max_value=3000,
+                step=50,
+                value=int(narration_config.get("words_per_section", 400)),
             )
             tts_model = st.selectbox(
                 "TTS model",
@@ -809,9 +981,12 @@ def render_config_wizard(project: str) -> None:
                 "DeepSeek validator model",
                 value=validator_config.get("model", "deepseek-chat"),
             )
-            submitted = st.form_submit_button("Save voice settings and continue", use_container_width=True)
+            submitted = st.form_submit_button("Save voice settings and continue", width="stretch")
             if submitted:
                 config["narration_style"] = split_lines(narration_style)
+                config["_project_config"]["narration_config"] = {
+                    "words_per_section": int(words_per_section)
+                }
                 config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
                 config["_project_config"]["validator_config"] = {
                     "model": validator_model.strip() or "deepseek-chat"
@@ -831,7 +1006,7 @@ def render_config_wizard(project: str) -> None:
                 height=220,
             )
             image_model = st.text_input("Image model", value=image_config.get("model", "seedream-v4"))
-            submitted = st.form_submit_button("Save visual settings and continue", use_container_width=True)
+            submitted = st.form_submit_button("Save visual settings and continue", width="stretch")
             if submitted:
                 config["aesthetic_style"] = aesthetic_style.strip()
                 config["characters"] = parse_characters(characters)
@@ -858,33 +1033,45 @@ def render_config_wizard(project: str) -> None:
             for warning in warnings:
                 st.write(f"- {warning}")
         else:
-            st.success("Saved config looks complete enough to run the pipeline.")
+            st.success("Saved config looks complete enough to run narration.")
 
-        st.json(config)
-        st.caption("This page displays what is already saved on disk. It no longer overwrites config.json from stale defaults.")
-        if st.button("Reload from disk", use_container_width=True):
+        summary_cols = st.columns(4)
+        with summary_cols[0]:
+            st.metric("Sections", len(config.get("section_outlines", [])))
+        with summary_cols[1]:
+            st.metric("Reference links", len(config.get("reference_links", [])))
+        with summary_cols[2]:
+            st.metric("Source files", len(config.get("source_material", [])))
+        with summary_cols[3]:
+            st.metric("Characters", len(config.get("characters", {})))
+
+        st.caption("This page shows a concise saved-config summary. The full config.json is available at the path above.")
+        if st.button("Reload from disk", width="stretch"):
             rerun_app()
 
     step_controls(len(steps))
 
 
-def render_pipeline(project: str) -> None:
-    st.subheader("Pipeline Runner")
+def render_narration(project: str) -> None:
+    st.subheader("Narration")
     config = load_config(project)
 
-    st.markdown("Run these first to prepare image review.")
-    for label, script, expected in PIPELINE_STAGES:
-        st.markdown(f"<div class='stage-row'><strong>{label}</strong><br>{script}</div>", unsafe_allow_html=True)
-        if st.button(f"Run {label}", key=f"run_{script}", use_container_width=True):
-            run_stage(project, label, script, expected)
-
-    st.divider()
-    st.markdown("After all images are approved, finish the video.")
-    for label, script, expected in FINISH_STAGES:
+    st.markdown("Generate the outline, narration, image prompts, and audio files.")
+    for label, script, expected in NARRATION_STAGES:
         actual_script = script or tts_script_for_config(config)
-        st.markdown(f"<div class='stage-row'><strong>{label}</strong><br>{actual_script}</div>", unsafe_allow_html=True)
-        if st.button(f"Run {label}", key=f"run_{label}", use_container_width=True):
+        st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
+        if st.button(f"Run {label}", key=f"run_{actual_script}_{label}", width="stretch"):
             run_stage(project, label, actual_script, expected)
+
+
+def render_video_generation(project: str) -> None:
+    st.subheader("Video Generation")
+
+    st.markdown("After image review is complete, generate segment clips and compose the final video.")
+    for label, script, expected in VIDEO_STAGES:
+        st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
+        if st.button(f"Run {label}", key=f"run_{script}", width="stretch"):
+            run_stage(project, label, script, expected)
 
 
 def render_image_review(project: str) -> None:
@@ -895,7 +1082,31 @@ def render_image_review(project: str) -> None:
         st.info("Run Generate Image Prompts first. The app will then show each prompt here.")
         return
 
-    st.session_state.active_review_index = min(st.session_state.active_review_index, len(items) - 1)
+    st.session_state.active_review_index = max(0, min(st.session_state.active_review_index, len(items) - 1))
+
+    nav_prev, nav_jump, nav_next = st.columns([1, 3, 1])
+    with nav_prev:
+        if st.button("Previous prompt", disabled=st.session_state.active_review_index == 0, width="stretch"):
+            set_active_review_index(st.session_state.active_review_index - 1, len(items))
+            rerun_app()
+    with nav_jump:
+        selected_index = st.selectbox(
+            "Jump to prompt",
+            options=list(range(len(items))),
+            index=st.session_state.active_review_index,
+            format_func=lambda index: (
+                f"{index + 1}. Section {items[index]['section_index']}."
+                f"{items[index]['prompt_index']} - {items[index]['section_title']}"
+            ),
+        )
+        if selected_index != st.session_state.active_review_index:
+            set_active_review_index(selected_index, len(items))
+            rerun_app()
+    with nav_next:
+        if st.button("Next prompt", disabled=st.session_state.active_review_index >= len(items) - 1, width="stretch"):
+            set_active_review_index(st.session_state.active_review_index + 1, len(items))
+            rerun_app()
+
     item = items[st.session_state.active_review_index]
     section_index = item["section_index"]
     prompt_index = item["prompt_index"]
@@ -903,6 +1114,8 @@ def render_image_review(project: str) -> None:
     approved_path = output_dir(project, "images") / f"image_{section_index}_{prompt_index}.png"
     review_dir = output_dir(project, "images") / "_review"
     rejected_dir = output_dir(project, "rejected_images")
+    active_review_path = Path(st.session_state.active_review_path) if st.session_state.active_review_path else None
+    has_review_image = bool(active_review_path and active_review_path.exists())
 
     left, right = st.columns([2, 1])
     with left:
@@ -914,19 +1127,28 @@ def render_image_review(project: str) -> None:
     if st.session_state.active_prompt_text == "":
         st.session_state.active_prompt_text = item["prompt"]
 
+    if st.session_state.image_review_notice:
+        notice_kind = st.session_state.image_review_notice_kind
+        if notice_kind == "warning":
+            st.warning(st.session_state.image_review_notice)
+        elif notice_kind == "error":
+            st.error(st.session_state.image_review_notice)
+        else:
+            st.success(st.session_state.image_review_notice)
+        st.session_state.image_review_notice = ""
+        st.session_state.image_review_notice_kind = "success"
+
     st.text_area("Narration segment", value=item["narration"], height=120, disabled=True)
     prompt_text = st.text_area("Image prompt", value=st.session_state.active_prompt_text, height=180)
     st.session_state.active_prompt_text = prompt_text
 
-    cols = st.columns([1, 1, 1, 1])
+    cols = st.columns([1, 1, 1])
     with cols[0]:
-        generate = st.button("Generate / regenerate", use_container_width=True)
+        generate = st.button("Generate new image", width="stretch")
     with cols[1]:
-        keep = st.button("Keep image", disabled=not st.session_state.active_review_path, use_container_width=True)
+        keep = st.button("Keep image", disabled=not has_review_image, width="stretch")
     with cols[2]:
-        reject = st.button("Reject image", disabled=not st.session_state.active_review_path, use_container_width=True)
-    with cols[3]:
-        skip = st.button("Next prompt", use_container_width=True)
+        reject = st.button("Reject image", disabled=not has_review_image, width="stretch")
 
     if generate:
         try:
@@ -936,19 +1158,22 @@ def render_image_review(project: str) -> None:
                 review_path = review_dir / f"image_{section_index}_{prompt_index}_attempt{attempt}.png"
                 save_image_checked(image, review_path)
                 st.session_state.active_review_path = str(review_path)
-            st.success(f"Review image saved: {review_path}")
+            st.session_state.image_review_notice = f"Review image saved: {review_path}"
+            st.session_state.image_review_notice_kind = "success"
+            rerun_app()
         except Exception as exc:
             st.error(str(exc))
 
-    if st.session_state.active_review_path and Path(st.session_state.active_review_path).exists():
-        st.image(st.session_state.active_review_path, caption="Current review image", use_container_width=True)
+    if has_review_image:
+        st.image(str(active_review_path), caption="Current review image", width="stretch")
     elif approved_path.exists():
-        st.image(str(approved_path), caption="Approved image already exists", use_container_width=True)
+        st.image(str(approved_path), caption="Approved image already exists", width="stretch")
 
     if keep and st.session_state.active_review_path:
         try:
             copy_checked(Path(st.session_state.active_review_path), approved_path)
-            st.success(f"Approved image saved: {approved_path}")
+            st.session_state.image_review_notice = f"Approved image saved: {approved_path}"
+            st.session_state.image_review_notice_kind = "success"
             st.session_state.active_review_path = ""
             st.session_state.active_prompt_text = ""
             st.session_state.active_review_index = min(len(items) - 1, st.session_state.active_review_index + 1)
@@ -961,24 +1186,19 @@ def render_image_review(project: str) -> None:
             existing = sorted(rejected_dir.glob(f"image_{section_index}_{prompt_index}_v*.png"))
             reject_path = rejected_dir / f"image_{section_index}_{prompt_index}_v{len(existing) + 1}.png"
             copy_checked(Path(st.session_state.active_review_path), reject_path)
-            st.warning(f"Rejected image saved: {reject_path}")
+            st.session_state.image_review_notice = f"Rejected image saved: {reject_path}"
+            st.session_state.image_review_notice_kind = "warning"
             st.session_state.active_review_path = ""
+            rerun_app()
         except Exception as exc:
             st.error(str(exc))
 
-    if skip:
-        st.session_state.active_review_path = ""
-        st.session_state.active_prompt_text = ""
-        st.session_state.active_review_index = min(len(items) - 1, st.session_state.active_review_index + 1)
-        rerun_app()
-
     nav_left, nav_right = st.columns([1, 1])
     with nav_left:
-        if st.button("Previous prompt", disabled=st.session_state.active_review_index == 0):
-            st.session_state.active_review_path = ""
-            st.session_state.active_prompt_text = ""
-            st.session_state.active_review_index -= 1
-            rerun_app()
+        if approved_path.exists():
+            st.caption("This prompt already has an approved image. Generate a new image here to replace it after review.")
+        else:
+            st.caption("Generate an image, then keep or reject it.")
     with nav_right:
         approved_count = len(list(output_dir(project, "images").glob("image_*.png")))
         st.metric("Approved images", approved_count)
@@ -1014,7 +1234,7 @@ def main() -> None:
     st.sidebar.divider()
     page = st.sidebar.radio(
         "Workspace",
-        ["Config Wizard", "Pipeline", "Image Review", "Outputs"],
+        ["Config Wizard", "Narration", "Image Review", "Video Generation", "Outputs"],
         index=0,
     )
 
@@ -1023,10 +1243,12 @@ def main() -> None:
 
     if page == "Config Wizard":
         render_config_wizard(project)
-    elif page == "Pipeline":
-        render_pipeline(project)
+    elif page == "Narration":
+        render_narration(project)
     elif page == "Image Review":
         render_image_review(project)
+    elif page == "Video Generation":
+        render_video_generation(project)
     else:
         render_outputs(project)
 

@@ -424,6 +424,7 @@ def chat_with_llm(system_prompt, queries, outline_data, my_tkn):
     responses = []
 
     for i, query in enumerate(queries):
+        print(f"Generating narration section {i + 1}/{len(queries)}", flush=True)
         outline_with_status = make_outline_with_status(outline_data, i)
         contextual_query = f"""
 {query}
@@ -474,9 +475,17 @@ print(f"Loaded {n_section} sections from outline_texts.json\n")
 # Load description metadata
 video_title = config["video_title"]
 narration_style = "\n".join(config["narration_style"])
+narration_config = config.get("_project_config", {}).get("narration_config", {})
+try:
+    words_per_section = int(narration_config.get("words_per_section", 400))
+except (TypeError, ValueError):
+    words_per_section = 400
 n_section = config["n_section"]
 reference_links = config["reference_links"]
-print(f"title: {video_title}\n narration_style: {narration_style}\nSections expected: {n_section}\n")
+print(
+    f"title: {video_title}\n narration_style: {narration_style}\n"
+    f"Sections expected: {n_section}\nTentative words per section: {words_per_section}\n"
+)
 
 # Prepare chunks
 if not chunk_cache_is_stale(source_dir, reference_links, chunks_path, chunks_meta_path):
@@ -560,6 +569,7 @@ system_prompt = render_prompt(
     video_title=video_title,
     n_section=n_section,
     narration_style=narration_style,
+    words_per_section=words_per_section,
 )
 # Generate narration JSONs
 responses = chat_with_llm(system_prompt, queries, outline_data, my_tkn)

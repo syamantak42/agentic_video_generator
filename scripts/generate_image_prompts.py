@@ -273,7 +273,7 @@ for sec_idx, sec in enumerate(sections, start=1):
     print(f"\n[Section {sec_idx}] {title}")
     for t in texts:
         count += 1
-        print(f"  Generating image prompt {count}/{total} ...")
+        print(f"Generating image prompt {count}/{total}", flush=True)
 
         img_prompt = generate_image_prompt(client, t, all_prompt_summaries)
         summary = summarize_single_prompt(client, img_prompt)

@@ -6,6 +6,7 @@ The system prompt and user message use uppercase markers. Interpret them exactly
 - `VIDEO_TITLE:` is the title of the full video.
 - `SECTION_COUNT:` is the total number of sections in the video.
 - `NARRATION_STYLE:` contains the required voice, tone, and delivery style.
+- `WORDS_PER_SECTION:` is the tentative target word count for the full generated section.
 - `SECTION_NUMBER:` identifies which section is being generated.
 - `SECTION_TITLE:` is the title to use for the generated section.
 - `SECTION_OUTLINE:` is the required content, structure, and emphasis for this section.
@@ -22,12 +23,16 @@ ${n_section}
 NARRATION_STYLE:
 ${narration_style}
 
+WORDS_PER_SECTION:
+${words_per_section}
+
 CRITICAL_PRIORITY:
 Generate narration for the current `SECTION_OUTLINE:` only. Do not write future sections, repeat completed sections, or make the section about retrieved context that is not relevant to the outline.
 
 GUIDELINES:
 - Follow the provided outline and context precisely for each section.
 - Maintain natural continuity and smooth transition from the previous section
+- Aim for approximately ${words_per_section} words total for the full section, split naturally across 2 to 3 narration_text segments.
 
 RESPONSE_FORMAT:
 Respond ONLY with valid JSON in this format.
@@ -36,13 +41,13 @@ Respond ONLY with valid JSON in this format.
     {
       "section_title": "<same as provided>",
       "narration_text": [
-        "Segment 1 (100 to 200 words)",
-        "Segment 2 (100 to 200 words)",
-        "Segment 3 (optional, 100 to 200 words)"
+        "Segment 1",
+        "Segment 2",
+        "Segment 3 (optional)"
       ]
     }
   ]
 }
 
-Each 'narration_text' entry should be a natural continuation of the section, forming 2 to 3 concise narrative segments.
+Each 'narration_text' entry should be a natural continuation of the section. Keep the full section near the `WORDS_PER_SECTION:` target, while preserving spoken flow and completeness.
 Do not include any text outside this JSON.
