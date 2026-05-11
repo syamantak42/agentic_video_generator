@@ -1,4 +1,4 @@
-"""Streamlit app for the agentic video generator workspace.
+﻿"""Streamlit app for the agentic video generator workspace.
 
 Run from the repo root or scripts folder with:
     streamlit run scripts/streamlit_app.py
@@ -42,13 +42,21 @@ IMAGE_MODEL_MAP = {
     "seedream_v4": "fal-ai/bytedance/seedream/v4/text-to-image",
 }
 
-NARRATION_STAGES = [
-    ("Generate Sections", "generate_sections.py", "outline_texts.json"),
+SCRIPT_STAGES = [
+    ("Generate Outline", "generate_sections.py", "outline_texts.json"),
     ("Validate Outline", "validate_outline.py", "outline_texts.json"),
     ("Generate Narration", "generate_script.py", "narration.json"),
     ("Validate Narration", "validate_narration.py", "narration.json"),
-    ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json"),
-    ("Generate Audio", None, "tts_index.json"),
+]
+
+IMAGE_PROMPT_STAGE = ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json")
+
+WORKFLOW_PAGES = [
+    "Config Wizard",
+    "Script Generation",
+    "Image Generation",
+    "Voice Generation",
+    "Video Generation",
 ]
 
 def inject_css() -> None:
@@ -61,8 +69,8 @@ def inject_css() -> None:
             --ink: #f3fbff;
             --muted: #afd0e8;
             --line: #2e496d;
-            --accent: #6d28d9;
-            --accent-2: #be123c;
+            --accent: #1d4ed8;
+            --accent-2: #15803d;
             --accent-3: #ffd166;
             --accent-soft: rgba(32, 227, 178, .16);
             --warn-soft: rgba(255, 209, 102, .18);
@@ -164,19 +172,6 @@ def inject_css() -> None:
             font-size: 1.217rem;
         }
 
-        .ok-pill, .wait-pill {
-            border-radius: 999px;
-            padding: 5px 11px;
-            font-size: 1.067rem;
-            font-weight: 800;
-            display: inline-block;
-        }
-
-        .ok-pill {
-            background: var(--accent-soft);
-            color: #7dffd8;
-        }
-
         div.stButton > button[kind="primary"],
         div.stFormSubmitButton > button,
         div.stButton > button,
@@ -193,11 +188,6 @@ def inject_css() -> None:
             background: #263a57;
             color: #88a5bd;
             border-color: #385372;
-        }
-
-        .wait-pill {
-            background: var(--warn-soft);
-            color: #ffe39a;
         }
 
         section[data-testid="stSidebar"] {
@@ -230,6 +220,59 @@ def inject_css() -> None:
             background-color: #07111f !important;
             color: var(--ink) !important;
         }
+
+        .stage-pill {
+            display: inline-block;
+            width: 70px;
+            margin-top: 7px;
+            padding: 6px 8px;
+            border-radius: 999px;
+            text-align: center;
+            font-size: .78rem;
+            font-weight: 900;
+            letter-spacing: .05em;
+            line-height: 1;
+        }
+
+        .stage-pill-done {
+            background: #16a34a;
+            color: #f0fff4;
+            border: 1px solid rgba(134, 239, 172, .45);
+        }
+
+        .stage-pill-todo {
+            background: #334155;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+        }
+
+        .stage-pill-files {
+            background: #1e3a8a;
+            color: #dbeafe;
+            border: 1px solid rgba(147, 197, 253, .45);
+        }
+
+        section[data-testid="stSidebar"] div.stButton > button {
+            background: transparent;
+            color: var(--ink);
+            border: 1px solid transparent;
+            justify-content: flex-start;
+            font-size: 1.08rem;
+            font-weight: 850;
+            min-height: 2.35rem;
+            padding-left: .3rem;
+        }
+
+        section[data-testid="stSidebar"] div.stButton > button:hover {
+            background: rgba(255, 255, 255, .08);
+            border-color: rgba(255, 255, 255, .14);
+        }
+
+        section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+            background: rgba(29, 78, 216, .24);
+            border-color: rgba(134, 239, 172, .35);
+        }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -336,6 +379,10 @@ def config_path(project: str) -> Path:
     return source_dir(project) / "config.json"
 
 
+def app_state_path(project: str) -> Path:
+    return source_dir(project) / "app_state.json"
+
+
 def load_config(project: str) -> dict:
     path = config_path(project)
     if path.exists():
@@ -353,6 +400,48 @@ def save_config(project: str, config: dict) -> Path:
     with path.open("w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
     return path
+
+
+def load_app_state(project: str) -> dict:
+    path = app_state_path(project)
+    if not path.exists():
+        return {"completed_stages": {}}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {"completed_stages": {}}
+    if not isinstance(data, dict):
+        return {"completed_stages": {}}
+    completed = data.get("completed_stages", {})
+    if not isinstance(completed, dict):
+        completed = {}
+    data["completed_stages"] = completed
+    return data
+
+
+def save_app_state(project: str, state: dict) -> Path:
+    ensure_project_dirs(project)
+    path = app_state_path(project)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def set_stage_complete(project: str, stage: str, complete: bool = True) -> None:
+    state = load_app_state(project)
+    completed = state.setdefault("completed_stages", {})
+    completed[stage] = {
+        "complete": bool(complete),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    save_app_state(project, state)
+
+
+def stage_acknowledged(project: str, stage: str) -> bool:
+    state = load_app_state(project)
+    entry = state.get("completed_stages", {}).get(stage, {})
+    return bool(isinstance(entry, dict) and entry.get("complete"))
 
 
 def split_lines(value: str) -> list[str]:
@@ -457,8 +546,6 @@ def config_warnings(config: dict) -> list[str]:
         warnings.append("Section outlines still look like template defaults.")
     if not config.get("narration_style", []):
         warnings.append("No narration style rules are saved.")
-    if not config.get("historical_context", "").strip():
-        warnings.append("Historical or subject context is empty.")
     if not config.get("aesthetic_style", "").strip():
         warnings.append("Aesthetic style is empty.")
     if not config.get("_project_config", {}).get("project_name"):
@@ -466,35 +553,64 @@ def config_warnings(config: dict) -> list[str]:
     return warnings
 
 
-def progress_event_from_line(line: str) -> tuple[str, int, int] | None:
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s"
+
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
+def progress_event_from_line(line: str) -> tuple[str, str, int, int, bool] | None:
     patterns = [
         (
             r"Generating narration section\s+(\d+)\s*/\s*(\d+)",
+            "narration",
             "Generating narration section {current} of {total}",
+            False,
         ),
         (
             r"Generating image prompt\s+(\d+)\s*/\s*(\d+)",
+            "image_prompts",
             "Generating image prompt {current} of {total}",
+            False,
+        ),
+        (
+            r"Generating audio\s+(\d+)\s*/\s*(\d+)",
+            "audio",
+            "Generating audio {current} of {total}",
+            False,
         ),
         (
             r"Generating clip\s+(\d+)\s*/\s*(\d+)",
+            "clips",
             "Generating clip {current} of {total}",
+            False,
         ),
         (
             r"Loading final video clip\s+(\d+)\s*/\s*(\d+)",
+            "video_load",
             "Loading final video clip {current} of {total}",
+            False,
         ),
         (
             r"Writing final video\s+(\d+)\s*/\s*(\d+)",
+            "video_write",
             "Writing final video {current} of {total}",
+            True,
         ),
     ]
-    for pattern, template in patterns:
+    for pattern, key, template, current_is_complete in patterns:
         match = re.search(pattern, line, flags=re.IGNORECASE)
         if match:
             current = int(match.group(1))
             total = max(1, int(match.group(2)))
-            return template.format(current=current, total=total), current, total
+            return template.format(current=current, total=total), key, current, total, current_is_complete
     return None
 
 
@@ -518,6 +634,8 @@ def run_script(script_name: str, project: str, extra_args: list[str] | None = No
     progress_text = st.empty()
     progress_bar = st.empty()
     saw_progress = False
+    progress_key = None
+    progress_started_at = 0.0
 
     assert process.stdout is not None
     for line in process.stdout:
@@ -525,9 +643,25 @@ def run_script(script_name: str, project: str, extra_args: list[str] | None = No
         lines.append(line)
         progress_event = progress_event_from_line(line)
         if progress_event:
-            message, current, total = progress_event
+            message, key, current, total, current_is_complete = progress_event
             saw_progress = True
-            progress_text.info(message)
+            if key != progress_key:
+                progress_key = key
+                progress_started_at = time.monotonic()
+
+            completed = current if current_is_complete else max(0, current - 1)
+            if key in {"video_load", "video_write"}:
+                eta_text = "estimating time remaining"
+                elapsed = time.monotonic() - progress_started_at
+                if 0 < completed < total and elapsed >= 1:
+                    seconds_per_unit = elapsed / completed
+                    eta_text = f"about {format_duration(seconds_per_unit * (total - completed))} remaining"
+                elif completed >= total:
+                    eta_text = "almost done"
+
+                progress_text.info(f"{message} - {eta_text}")
+            else:
+                progress_text.info(message)
             progress_bar.progress(min(1.0, current / total))
 
     return_code = process.wait()
@@ -592,14 +726,50 @@ def format_media_key(key: tuple[int, int]) -> str:
     return f"{key[0]}_{key[1]}"
 
 
+def narration_segment_keys(project: str) -> set[tuple[int, int]]:
+    path = output_dir(project, "output_jsons") / "narration.json"
+    if not path.exists():
+        return set()
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return set()
+
+    keys: set[tuple[int, int]] = set()
+    for section_index, section in enumerate(data.get("sections", []), start=1):
+        for prompt_index, text in enumerate(section.get("narration_text", []), start=1):
+            if str(text).strip():
+                keys.add((section_index, prompt_index))
+    return keys
+
+
+def image_prompt_keys(project: str) -> set[tuple[int, int]]:
+    path = output_dir(project, "output_jsons") / "image_prompts.json"
+    if not path.exists():
+        return set()
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return set()
+
+    keys: set[tuple[int, int]] = set()
+    for section_index, section in enumerate(data.get("sections", []), start=1):
+        for prompt_index, prompt in enumerate(section.get("image_prompts", []), start=1):
+            if str(prompt).strip():
+                keys.add((section_index, prompt_index))
+    return keys
+
+
 def parse_media_key_text(value: str) -> tuple[int, int]:
     match = re.match(r"^\s*(\d+)[_\-:](\d+)\s*$", value)
     if not match:
-        raise ValueError(f"Invalid clip key: {value}. Use section_segment, e.g. 3_2.")
+        raise ValueError(f"Invalid frame key: {value}. Use section_segment, e.g. 3_2.")
     return int(match.group(1)), int(match.group(2))
 
 
-def parse_clip_selection_text(selection: str, available_keys: set[tuple[int, int]]) -> set[tuple[int, int]]:
+def parse_media_selection_text(selection: str, available_keys: set[tuple[int, int]]) -> set[tuple[int, int]]:
     selection = selection.strip().lower()
     available = sorted(available_keys)
     if selection == "all":
@@ -615,14 +785,95 @@ def parse_clip_selection_text(selection: str, available_keys: set[tuple[int, int
     missing = requested - set(available)
     if missing:
         missing_text = ", ".join(format_media_key(key) for key in sorted(missing))
-        raise ValueError(f"Requested clips do not have matching image/audio pairs: {missing_text}")
+        raise ValueError(f"Requested frames are not available: {missing_text}")
     return requested
+
+
+def stage_readiness(project: str, stage: str) -> tuple[bool, str]:
+    status = output_status(project)
+
+    if stage == "Config Wizard":
+        warnings = config_warnings(load_config(project))
+        if warnings:
+            return False, "Config still has required fields missing."
+        return True, "Config is ready."
+
+    if stage == "Script Generation":
+        if not status["outline_texts.json"]:
+            return False, "outline_texts.json has not been generated."
+        if not status["narration.json"]:
+            return False, "narration.json has not been generated."
+        return True, "Outline and narration JSON files are ready."
+
+    if stage == "Image Generation":
+        prompt_keys = image_prompt_keys(project)
+        if not prompt_keys:
+            return False, "image_prompts.json has not been generated."
+        approved_image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
+        missing = sorted(prompt_keys - approved_image_keys)
+        if missing:
+            missing_text = ", ".join(format_media_key(key) for key in missing[:8])
+            if len(missing) > 8:
+                missing_text += ", ..."
+            return False, f"Approved images are missing for: {missing_text}"
+        return True, "Image prompts and approved images are ready."
+
+    if stage == "Voice Generation":
+        narration_keys = narration_segment_keys(project)
+        if not narration_keys:
+            return False, "narration.json has no narration frames."
+        audio_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
+        missing = sorted(narration_keys - audio_keys)
+        if missing:
+            missing_text = ", ".join(format_media_key(key) for key in missing[:8])
+            if len(missing) > 8:
+                missing_text += ", ..."
+            return False, f"Audio files are missing for: {missing_text}"
+        return True, "Audio files are ready."
+
+    if stage == "Video Generation":
+        if not status["video"]:
+            return False, "Final video MP4 has not been generated."
+        return True, "Final video is ready."
+
+    return False, "Unknown stage."
+
+
+def stage_completion_status(project: str) -> dict[str, bool]:
+    return {stage: stage_acknowledged(project, stage) for stage in WORKFLOW_PAGES}
+
+
+def render_sidebar_navigation(project: str, pages: list[str]) -> str:
+    completion = stage_completion_status(project)
+    st.sidebar.markdown("### Stage Status")
+
+    for page_name in pages:
+        pill_col, button_col = st.sidebar.columns([0.34, 0.66])
+        with pill_col:
+            if page_name == "Outputs":
+                st.markdown("<span class='stage-pill stage-pill-files'>FILES</span>", unsafe_allow_html=True)
+            elif completion.get(page_name, False):
+                st.markdown("<span class='stage-pill stage-pill-done'>DONE</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("<span class='stage-pill stage-pill-todo'>TODO</span>", unsafe_allow_html=True)
+        with button_col:
+            if st.button(
+                page_name,
+                key=f"nav_{page_name}",
+                width="stretch",
+                type="primary" if st.session_state.workspace_page == page_name else "secondary",
+            ):
+                st.session_state.workspace_page = page_name
+                rerun_app()
+
+    return st.session_state.workspace_page
 
 
 def verify_stage_artifact(
     project: str,
     expected: str | None,
     expected_clip_keys: set[tuple[int, int]] | None = None,
+    expected_audio_keys: set[tuple[int, int]] | None = None,
 ) -> tuple[bool, str]:
     if not expected:
         return True, ""
@@ -661,6 +912,13 @@ def verify_stage_artifact(
         if expected == "tts_index.json":
             if not isinstance(data, list) or not data:
                 return False, f"tts_index.json contains no audio entries: {path}"
+            audio_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
+            keys_to_check = expected_audio_keys if expected_audio_keys is not None else narration_segment_keys(project)
+            if keys_to_check:
+                missing = sorted(keys_to_check - audio_keys)
+                if missing:
+                    missing_text = ", ".join(format_media_key(key) for key in missing)
+                    return False, f"Missing audio files for frame keys: {missing_text}"
 
         return True, f"Verified output: {path}"
 
@@ -710,7 +968,8 @@ def run_stage(
     expected_output: str | None = None,
     extra_args: list[str] | None = None,
     expected_clip_keys: set[tuple[int, int]] | None = None,
-) -> None:
+    expected_audio_keys: set[tuple[int, int]] | None = None,
+) -> bool:
     with st.spinner(f"Running {label}..."):
         code, log = run_script(script_name, project, extra_args=extra_args)
     if code == 0:
@@ -718,23 +977,27 @@ def run_stage(
             project,
             expected_output,
             expected_clip_keys=expected_clip_keys,
+            expected_audio_keys=expected_audio_keys,
         )
         if ok:
             location = artifact_location(project, expected_output)
             st.success(stage_success_text(label, expected_output))
             if location:
                 st.markdown(f"<div class='path-box'>{location}</div>", unsafe_allow_html=True)
+            return True
         else:
             st.error(f"{label} finished but output validation failed.")
             st.write(message)
             recent_log = "\n".join(log.splitlines()[-40:])
             with st.expander("Recent log output", expanded=False):
                 st.code(recent_log or "No log output captured.", language="text")
+            return False
     else:
         st.error(f"{label} failed with exit code {code}.")
         recent_log = "\n".join(log.splitlines()[-40:])
         with st.expander("Recent log output", expanded=False):
             st.code(recent_log or "No log output captured.", language="text")
+        return False
 
 
 def load_image_prompt_items(project: str) -> list[dict]:
@@ -824,6 +1087,9 @@ def copy_checked(src: Path, dst: Path) -> None:
 def init_state() -> None:
     st.session_state.setdefault("config_step", 0)
     st.session_state.setdefault("selected_project", "")
+    st.session_state.setdefault("workspace_page", "Config Wizard")
+    st.session_state.setdefault("pending_workspace_page", "")
+    st.session_state.setdefault("config_saved_notice", "")
     st.session_state.setdefault("active_review_index", 0)
     st.session_state.setdefault("active_review_path", "")
     st.session_state.setdefault("active_prompt_text", "")
@@ -850,7 +1116,7 @@ def render_header() -> None:
         """
         <div class="app-hero">
             <h1>Agentic Video Generator</h1>
-            <p>Build the project config, generate narration and audio, review images, and compose the final video from one guided workspace.</p>
+            <p>Build the project config, generate scripts, create images and voice, then compose the final video from one guided workspace.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -890,31 +1156,6 @@ def render_project_selector() -> str:
     if not st.session_state.selected_project and project:
         st.session_state.selected_project = project
     return st.session_state.selected_project
-
-
-def render_project_metrics(project: str) -> None:
-    status = output_status(project)
-    cols = st.columns(5)
-    labels = [
-        ("Outline", status["outline_texts.json"]),
-        ("Narration", status["narration.json"]),
-        ("Prompts", status["image_prompts.json"]),
-        ("Audio Index", status["tts_index.json"]),
-        ("Video", status["video"]),
-    ]
-    for col, (label, ok) in zip(cols, labels):
-        with col:
-            pill = "Ready" if ok else "Pending"
-            klass = "ok-pill" if ok else "wait-pill"
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">{label}</div>
-                    <div class="{klass}">{pill}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
 
 def step_controls(total_steps: int) -> None:
@@ -969,19 +1210,16 @@ def render_config_wizard(project: str) -> None:
     elif step == 2:
         st.caption("PDF and TXT links are downloaded into source_material. HTML and Wikipedia links stay as reference links for retrieval.")
         uploaded = st.file_uploader("Upload PDFs or TXT files", type=["pdf", "txt"], accept_multiple_files=True)
-        if st.button("Save uploaded files", width="stretch"):
-            saved = save_uploaded_sources(project, uploaded)
-            material = list(dict.fromkeys(config.get("source_material", []) + saved))
-            config["source_material"] = material
-            config["intro_material"] = list(dict.fromkeys(config.get("intro_material", []) + saved))
-            save_config(project, config)
-            st.success(f"Saved {len(saved)} uploaded source files.")
-
         link_text = st.text_area("Reference links or downloadable PDF/TXT links", value="\n".join(config.get("reference_links", [])), height=180)
-        if st.button("Process links and save", width="stretch"):
+
+        if st.button("Save sources and continue", width="stretch"):
+            uploaded_files = save_uploaded_sources(project, uploaded)
             references: list[str] = []
-            downloaded: list[str] = []
+            downloaded: list[str] = uploaded_files[:]
             results: list[str] = []
+
+            for filename in uploaded_files:
+                results.append(f"Uploaded: {filename}")
 
             for url in split_lines(link_text):
                 try:
@@ -1004,7 +1242,8 @@ def render_config_wizard(project: str) -> None:
             config["intro_material"] = list(dict.fromkeys(config.get("intro_material", []) + downloaded))
             save_config(project, config)
             st.session_state.link_results = results
-            st.success("Links processed.")
+            st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+            rerun_app()
 
         for result in st.session_state.link_results:
             st.write(result)
@@ -1012,12 +1251,6 @@ def render_config_wizard(project: str) -> None:
         with st.expander("Current source_material folder", expanded=False):
             files = sorted(p.name for p in source_dir(project).glob("*") if p.is_file())
             st.code("\n".join(files) if files else "No files yet.", language="text")
-
-        if st.button("Save source links and continue", width="stretch"):
-            config["reference_links"] = list(dict.fromkeys(split_lines(link_text)))
-            save_config(project, config)
-            st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
-            rerun_app()
 
     elif step == 3:
         tts_config = config.get("_project_config", {}).get("tts_config", {})
@@ -1085,6 +1318,9 @@ def render_config_wizard(project: str) -> None:
         st.markdown("Saved configuration file")
         path = config_path(project)
         st.markdown(f"<div class='path-box'>{path}</div>", unsafe_allow_html=True)
+        if st.session_state.config_saved_notice:
+            st.success(st.session_state.config_saved_notice)
+            st.session_state.config_saved_notice = ""
         if path.exists():
             modified = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(path.stat().st_mtime))
             st.caption(f"Last saved: {modified}")
@@ -1111,28 +1347,115 @@ def render_config_wizard(project: str) -> None:
             st.metric("Characters", len(config.get("characters", {})))
 
         st.caption("This page shows a concise saved-config summary. The full config.json is available at the path above.")
-        if st.button("Reload from disk", width="stretch"):
+        if st.button("Save Config", width="stretch"):
+            saved_path = save_config(project, config)
+            ready, _ = stage_readiness(project, "Config Wizard")
+            if ready:
+                set_stage_complete(project, "Config Wizard", True)
+            st.session_state.config_saved_notice = f"Config saved: {saved_path}"
             rerun_app()
 
     step_controls(len(steps))
 
 
-def render_narration(project: str) -> None:
-    st.subheader("Narration")
-    config = load_config(project)
+def render_script_generation(project: str) -> None:
+    st.subheader("Script Generation")
 
-    st.markdown("Generate the outline, narration, image prompts, and audio files.")
-    for label, script, expected in NARRATION_STAGES:
-        actual_script = script or tts_script_for_config(config)
+    st.markdown("Generate and validate the outline and narration JSON files.")
+    for label, script, expected in SCRIPT_STAGES:
         st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
-        if st.button(f"Run {label}", key=f"run_{actual_script}_{label}", width="stretch"):
-            run_stage(project, label, actual_script, expected)
+        if st.button(f"Run {label}", key=f"run_{script}_{label}", width="stretch"):
+            run_stage(project, label, script, expected)
+
+
+def render_voice_generation(project: str) -> None:
+    st.subheader("Voice Generation")
+
+    st.markdown("Generate narration audio selectively, using the frame keys from narration.json.")
+
+    config = load_config(project)
+    available_keys = narration_segment_keys(project)
+    existing_audio_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
+    missing_audio_keys = available_keys - existing_audio_keys
+    key_options = sorted(available_keys)
+    key_labels = [format_media_key(key) for key in key_options]
+    key_by_label = dict(zip(key_labels, key_options))
+
+    if not available_keys:
+        st.info("Generate and validate narration first. The audio frames come from narration.json.")
+        return
+
+    st.markdown("<div class='stage-row'><strong>Generate Audio</strong></div>", unsafe_allow_html=True)
+    audio_mode = st.radio(
+        "Audio selection",
+        ["Missing audio", "All audio", "Range", "Specific frames"],
+        horizontal=True,
+    )
+
+    selected_audio_keys: set[tuple[int, int]] = set()
+    audio_selection_arg = "missing"
+    selection_error = ""
+
+    if audio_mode == "Missing audio":
+        selected_audio_keys = set(missing_audio_keys)
+        audio_selection_arg = "missing"
+        if selected_audio_keys:
+            st.caption(
+                "Will generate missing audio: "
+                + ", ".join(format_media_key(key) for key in sorted(selected_audio_keys))
+            )
+        else:
+            st.info("All narration frames already have audio.")
+    elif audio_mode == "All audio":
+        selected_audio_keys = set(available_keys)
+        audio_selection_arg = "all"
+    elif audio_mode == "Range":
+        range_cols = st.columns(2)
+        with range_cols[0]:
+            start_label = st.selectbox("Start frame", key_labels, index=0)
+        with range_cols[1]:
+            end_label = st.selectbox("End frame", key_labels, index=len(key_labels) - 1)
+        start_key = key_by_label[start_label]
+        end_key = key_by_label[end_label]
+        if start_key > end_key:
+            start_key, end_key = end_key, start_key
+        selected_audio_keys = {key for key in available_keys if start_key <= key <= end_key}
+        audio_selection_arg = f"{format_media_key(start_key)}-{format_media_key(end_key)}"
+    else:
+        default_labels = [format_media_key(key) for key in sorted(missing_audio_keys)] or key_labels[:1]
+        selected_labels = st.multiselect(
+            "Specific frames",
+            key_labels,
+            default=default_labels,
+        )
+        selected_audio_keys = {key_by_label[label] for label in selected_labels}
+        audio_selection_arg = ",".join(format_media_key(key) for key in sorted(selected_audio_keys))
+        if not selected_audio_keys:
+            selection_error = "Select at least one frame."
+
+    if selection_error:
+        st.error(selection_error)
+
+    script = tts_script_for_config(config)
+    can_generate_audio = not selection_error and bool(selected_audio_keys)
+    if st.button("Run Generate Audio", key="run_generate_audio_selected", width="stretch", disabled=not can_generate_audio):
+        run_stage(
+            project,
+            "Generate Audio",
+            script,
+            "tts_index.json",
+            extra_args=["--audio-selection", audio_selection_arg],
+            expected_audio_keys=selected_audio_keys,
+        )
+
+    st.metric("Audio files", len(existing_audio_keys))
+    st.markdown(f"<div class='path-box'>{output_dir(project, 'audios')}</div>", unsafe_allow_html=True)
 
 
 def render_video_generation(project: str) -> None:
     st.subheader("Video Generation")
 
-    st.markdown("After image review is complete, generate segment clips and compose the final video.")
+    st.markdown("After image and voice generation are complete, generate segment clips and compose the final video.")
 
     image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
     audio_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
@@ -1224,9 +1547,16 @@ def render_video_generation(project: str) -> None:
         run_stage(project, "Compose Final Video", "make_video.py", "videos")
 
 
-def render_image_review(project: str) -> None:
-    st.subheader("Image Review")
+def render_image_generation(project: str) -> None:
+    st.subheader("Image Generation")
     config = load_config(project)
+
+    label, script, expected = IMAGE_PROMPT_STAGE
+    st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
+    if st.button(f"Run {label}", key=f"run_{script}_{label}", width="stretch"):
+        run_stage(project, label, script, expected)
+
+    st.markdown("<div class='stage-row'><strong>Review and Generate Images</strong></div>", unsafe_allow_html=True)
     items = load_image_prompt_items(project)
     if not items:
         st.info("Run Generate Image Prompts first. The app will then show each prompt here.")
@@ -1354,6 +1684,133 @@ def render_image_review(project: str) -> None:
         st.metric("Approved images", approved_count)
 
 
+def generate_all_images_without_review(project: str) -> bool:
+    config = load_config(project)
+    items = load_image_prompt_items(project)
+    if not items:
+        st.error("Image prompts are missing. Generate image_prompts.json first.")
+        return False
+
+    progress_text = st.empty()
+    progress_bar = st.progress(0.0)
+    try:
+        for index, item in enumerate(items, start=1):
+            section_index = item["section_index"]
+            prompt_index = item["prompt_index"]
+            progress_text.info(f"Generating image {index} of {len(items)}")
+            image = generate_image_with_fal(item["prompt"], config)
+            approved_path = output_dir(project, "images") / f"image_{section_index}_{prompt_index}.png"
+            save_image_checked(image, approved_path)
+            progress_bar.progress(index / len(items))
+    except Exception as exc:
+        st.error(f"Automatic image generation failed: {exc}")
+        return False
+    finally:
+        time.sleep(0.2)
+        progress_text.empty()
+        progress_bar.empty()
+
+    st.success("Images generated automatically.")
+    st.markdown(f"<div class='path-box'>{output_dir(project, 'images')}</div>", unsafe_allow_html=True)
+    return True
+
+
+def run_full_automatic_pipeline(project: str) -> None:
+    st.warning("Automatic mode skips image review and saves generated images directly as approved images.")
+
+    for label, script, expected in SCRIPT_STAGES:
+        if not run_stage(project, label, script, expected):
+            return
+
+    label, script, expected = IMAGE_PROMPT_STAGE
+    if not run_stage(project, label, script, expected):
+        return
+
+    if not generate_all_images_without_review(project):
+        return
+
+    config = load_config(project)
+    audio_keys = narration_segment_keys(project)
+    if not run_stage(
+        project,
+        "Generate Audio",
+        tts_script_for_config(config),
+        "tts_index.json",
+        extra_args=["--audio-selection", "all"],
+        expected_audio_keys=audio_keys,
+    ):
+        return
+
+    image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
+    audio_file_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
+    clip_keys = image_keys & audio_file_keys
+    if not run_stage(
+        project,
+        "Generate Clips",
+        "generate_clips.py",
+        "clips",
+        extra_args=["--clip-selection", "all"],
+        expected_clip_keys=clip_keys,
+    ):
+        return
+
+    run_stage(project, "Compose Final Video", "make_video.py", "videos")
+
+
+def render_page_footer(project: str, page: str) -> None:
+    if page not in WORKFLOW_PAGES:
+        return
+
+    st.markdown("---")
+    left, right = st.columns([1, 1])
+    ready_to_mark, readiness_message = stage_readiness(project, page)
+    is_acknowledged = stage_acknowledged(project, page)
+
+    with left:
+        mark_label = f"Mark {page} Complete"
+        if is_acknowledged:
+            st.success(f"{page} has been marked complete.")
+        if st.button(
+            mark_label,
+            key=f"mark_complete_{page}",
+            width="stretch",
+            disabled=not ready_to_mark,
+        ):
+            set_stage_complete(project, page, True)
+            rerun_app()
+        if not ready_to_mark:
+            st.caption(readiness_message)
+
+    if page == "Config Wizard":
+        with left:
+            auto_disabled = bool(config_warnings(load_config(project)))
+            if st.button(
+                "Run Full Automatic Pipeline",
+                key="run_full_auto_pipeline",
+                width="stretch",
+                disabled=auto_disabled,
+            ):
+                run_full_automatic_pipeline(project)
+            if auto_disabled:
+                st.caption("Complete and save the config before running the automatic pipeline.")
+
+    current_index = WORKFLOW_PAGES.index(page)
+    if current_index < len(WORKFLOW_PAGES) - 1:
+        next_page = WORKFLOW_PAGES[current_index + 1]
+        next_disabled = not stage_acknowledged(project, page)
+        with right:
+            if st.button(
+                f"Go to {next_page}",
+                key=f"go_to_{next_page}",
+                width="stretch",
+                disabled=next_disabled,
+            ):
+                st.session_state.pending_workspace_page = next_page
+                rerun_app()
+            if next_disabled:
+                st.caption("Mark this stage complete to continue with the guided next-step button.")
+
+
 def render_outputs(project: str) -> None:
     st.subheader("Outputs")
     for folder in OUTPUT_FOLDERS:
@@ -1379,28 +1836,35 @@ def main() -> None:
         return
 
     ensure_project_dirs(project)
-    render_project_metrics(project)
 
     st.sidebar.divider()
-    page = st.sidebar.radio(
-        "Workspace",
-        ["Config Wizard", "Narration", "Image Review", "Video Generation", "Outputs"],
-        index=0,
-    )
+    pages = WORKFLOW_PAGES + ["Outputs"]
+    pending_page = st.session_state.get("pending_workspace_page", "")
+    if pending_page in pages:
+        st.session_state.workspace_page = pending_page
+    st.session_state.pending_workspace_page = ""
+    if st.session_state.workspace_page not in pages:
+        st.session_state.workspace_page = "Config Wizard"
+
+    page = render_sidebar_navigation(project, pages)
 
     st.markdown(f"Project: **{project}**")
     st.markdown(f"<div class='path-box'>{project_root(project)}</div>", unsafe_allow_html=True)
 
     if page == "Config Wizard":
         render_config_wizard(project)
-    elif page == "Narration":
-        render_narration(project)
-    elif page == "Image Review":
-        render_image_review(project)
+    elif page == "Script Generation":
+        render_script_generation(project)
+    elif page == "Image Generation":
+        render_image_generation(project)
+    elif page == "Voice Generation":
+        render_voice_generation(project)
     elif page == "Video Generation":
         render_video_generation(project)
     else:
         render_outputs(project)
+
+    render_page_footer(project, page)
 
 
 def running_inside_streamlit() -> bool:

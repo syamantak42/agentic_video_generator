@@ -31,15 +31,15 @@ def load_config(project_name):
 
 def run_script(script_name, project_name):
     """Run a script and check for errors."""
-    print(f"\nâ–¶ Running {script_name}...")
+    print(f"\n[RUN] {script_name}...")
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name)
     result = subprocess.run([sys.executable, script_path, project_name])
     
     if result.returncode != 0:
-        print(f"âœ— Error in {script_name}. Pipeline stopped.")
+        print(f"[ERROR] {script_name} failed. Pipeline stopped.")
         return False
     
-    print(f"âœ“ Completed {script_name}.")
+    print(f"[OK] Completed {script_name}.")
     return True
 
 
@@ -138,7 +138,7 @@ if __name__ == "__main__":
                     sys.exit(1)
     
     print(f"\n{'='*60}")
-    print(f"âœ“ Pipeline completed successfully!")
+    print("[OK] Pipeline completed successfully!")
     print(f"{'='*60}")
     print(f"Completed stages: {len(completed_stages)}/{len(stages)}")
     print(f"Output location: {project_name}/outputs/output_jsons/")
