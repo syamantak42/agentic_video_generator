@@ -34,6 +34,7 @@ Notes:
 """
 
 from moviepy.editor import concatenate_videoclips, VideoFileClip
+from proglog import ProgressBarLogger
 import os
 import sys
 import re
@@ -78,6 +79,7 @@ clips_dir = os.path.join(project_root, "outputs", "clips")
 print("clips directory:", clips_dir)
 
 video_dir = os.path.join(project_root, "outputs", "videos")
+os.makedirs(video_dir, exist_ok=True)
 print("video directory:", video_dir)
 
 
@@ -100,9 +102,21 @@ def extract_numbers(name):
     nums = re.findall(r'\d+', name)
     return tuple(map(int, nums)) if nums else (0,)
 
+class AppProgressLogger(ProgressBarLogger):
+    """Emit simple progress lines that Streamlit can render as a progress bar."""
 
+    def callback(self, **changes):
+        bars = self.state.get("bars", {})
+        t_bar = bars.get("t")
+        if not t_bar:
+            return
 
+        index = int(t_bar.get("index", 0))
+        total = int(t_bar.get("total", 0) or 0)
+        if total <= 0:
+            return
 
+        print(f"Writing final video {min(index, total)}/{total}", flush=True)
 
 
 # -----------------------------
@@ -119,9 +133,12 @@ clip_files = [f for f in os.listdir(clips_dir) if f.lower().endswith('.mp4')]
 clip_files = sorted(clip_files, key=extract_numbers)
 
 print(f"Found {len(clip_files)} clips")
+if not clip_files:
+    raise RuntimeError(f"No clip MP4 files found in {clips_dir}")
 
 video_clips = []
-for fname in clip_files:
+for index, fname in enumerate(clip_files, start=1):
+    print(f"Loading final video clip {index}/{len(clip_files)}", flush=True)
     path = os.path.join(clips_dir, fname)
     video_clips.append(VideoFileClip(path))
 
@@ -129,9 +146,22 @@ print("\nMerging video clips...")
 final_video = concatenate_videoclips(video_clips, method="compose")
 
 output_path = os.path.join(video_dir, video_filename)
-final_video.write_videofile(output_path, codec="libx264", fps=fps)
+try:
+    final_video.write_videofile(
+        output_path,
+        codec="libx264",
+        fps=fps,
+        logger=AppProgressLogger(),
+    )
+finally:
+    final_video.close()
+    for clip in video_clips:
+        clip.close()
 
-print(f"\nâœ… Video generated successfully: {output_path}")
+if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:
+    raise RuntimeError(f"Final video was not saved correctly: {output_path}")
+
+print(f"\n[OK] Video generated successfully: {output_path}")
 
 
 

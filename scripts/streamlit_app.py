@@ -466,7 +466,7 @@ def config_warnings(config: dict) -> list[str]:
     return warnings
 
 
-def progress_message_from_line(line: str) -> str:
+def progress_event_from_line(line: str) -> tuple[str, int, int] | None:
     patterns = [
         (
             r"Generating narration section\s+(\d+)\s*/\s*(\d+)",
@@ -480,12 +480,22 @@ def progress_message_from_line(line: str) -> str:
             r"Generating clip\s+(\d+)\s*/\s*(\d+)",
             "Generating clip {current} of {total}",
         ),
+        (
+            r"Loading final video clip\s+(\d+)\s*/\s*(\d+)",
+            "Loading final video clip {current} of {total}",
+        ),
+        (
+            r"Writing final video\s+(\d+)\s*/\s*(\d+)",
+            "Writing final video {current} of {total}",
+        ),
     ]
     for pattern, template in patterns:
         match = re.search(pattern, line, flags=re.IGNORECASE)
         if match:
-            return template.format(current=match.group(1), total=match.group(2))
-    return ""
+            current = int(match.group(1))
+            total = max(1, int(match.group(2)))
+            return template.format(current=current, total=total), current, total
+    return None
 
 
 def run_script(script_name: str, project: str, extra_args: list[str] | None = None) -> tuple[int, str]:
@@ -505,18 +515,27 @@ def run_script(script_name: str, project: str, extra_args: list[str] | None = No
     )
 
     lines: list[str] = []
-    progress_box = st.empty()
+    progress_text = st.empty()
+    progress_bar = st.empty()
+    saw_progress = False
 
     assert process.stdout is not None
     for line in process.stdout:
         line = line.rstrip()
         lines.append(line)
-        progress_message = progress_message_from_line(line)
-        if progress_message:
-            progress_box.info(progress_message)
+        progress_event = progress_event_from_line(line)
+        if progress_event:
+            message, current, total = progress_event
+            saw_progress = True
+            progress_text.info(message)
+            progress_bar.progress(min(1.0, current / total))
 
     return_code = process.wait()
-    progress_box.empty()
+    if saw_progress:
+        progress_bar.progress(1.0)
+        time.sleep(0.25)
+    progress_text.empty()
+    progress_bar.empty()
     full_log = "\n".join(lines)
     return return_code, full_log
 
