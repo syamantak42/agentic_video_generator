@@ -14,9 +14,10 @@ import shutil
 import subprocess
 import sys
 import time
+import html
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import requests
 import streamlit as st
@@ -223,12 +224,13 @@ def inject_css() -> None:
 
         .stage-pill {
             display: inline-block;
-            width: 70px;
-            margin-top: 7px;
-            padding: 6px 8px;
+            width: 58px;
+            flex: 0 0 auto;
+            margin: 0;
+            padding: 3px 6px;
             border-radius: 999px;
             text-align: center;
-            font-size: .78rem;
+            font-size: .68rem;
             font-weight: 900;
             letter-spacing: .05em;
             line-height: 1;
@@ -252,15 +254,77 @@ def inject_css() -> None:
             border: 1px solid rgba(147, 197, 253, .45);
         }
 
+        .stage-nav-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-height: 1.6rem;
+            margin: 0;
+            padding: 2px 4px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            color: var(--ink) !important;
+            text-decoration: none !important;
+        }
+
+        .stage-nav-row:hover {
+            background: rgba(255, 255, 255, .08);
+            border-color: rgba(255, 255, 255, .14);
+        }
+
+        .stage-nav-row.active {
+            background: rgba(29, 78, 216, .24);
+            border-color: rgba(134, 239, 172, .35);
+        }
+
+        .stage-nav-label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 1rem;
+            font-weight: 850;
+            line-height: 1.05;
+        }
+
         section[data-testid="stSidebar"] div.stButton > button {
             background: transparent;
             color: var(--ink);
             border: 1px solid transparent;
             justify-content: flex-start;
-            font-size: 1.08rem;
+            font-size: 1rem;
             font-weight: 850;
-            min-height: 2.35rem;
+            min-height: 1.55rem;
             padding-left: .3rem;
+            padding-top: .1rem;
+            padding-bottom: .1rem;
+            margin: 0;
+            line-height: 1.05;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+            gap: .18rem;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] > div {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stElementContainer"] {
+            margin-bottom: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] div.stButton {
+            margin: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+            margin-bottom: 0;
         }
 
         section[data-testid="stSidebar"] div.stButton > button:hover {
@@ -848,25 +912,44 @@ def render_sidebar_navigation(project: str, pages: list[str]) -> str:
     st.sidebar.markdown("### Stage Status")
 
     for page_name in pages:
-        pill_col, button_col = st.sidebar.columns([0.34, 0.66])
-        with pill_col:
-            if page_name == "Outputs":
-                st.markdown("<span class='stage-pill stage-pill-files'>FILES</span>", unsafe_allow_html=True)
-            elif completion.get(page_name, False):
-                st.markdown("<span class='stage-pill stage-pill-done'>DONE</span>", unsafe_allow_html=True)
-            else:
-                st.markdown("<span class='stage-pill stage-pill-todo'>TODO</span>", unsafe_allow_html=True)
-        with button_col:
-            if st.button(
-                page_name,
-                key=f"nav_{page_name}",
-                width="stretch",
-                type="primary" if st.session_state.workspace_page == page_name else "secondary",
-            ):
-                st.session_state.workspace_page = page_name
-                rerun_app()
+        if page_name == "Outputs":
+            pill_text = "FILES"
+            pill_class = "stage-pill-files"
+        elif completion.get(page_name, False):
+            pill_text = "DONE"
+            pill_class = "stage-pill-done"
+        else:
+            pill_text = "TODO"
+            pill_class = "stage-pill-todo"
+
+        active_class = " active" if st.session_state.workspace_page == page_name else ""
+        href = f"?stage={quote(page_name)}"
+        st.sidebar.markdown(
+            f"""
+            <a class="stage-nav-row{active_class}" href="{href}" target="_self">
+                <span class="stage-nav-label">{html.escape(page_name)}</span>
+                <span class="stage-pill {pill_class}">{pill_text}</span>
+            </a>
+            """,
+            unsafe_allow_html=True,
+        )
 
     return st.session_state.workspace_page
+
+
+def selected_stage_from_query() -> str:
+    try:
+        value = st.query_params.get("stage", "")
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            value = params.get("stage", [""])
+        except Exception:
+            value = ""
+
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return unquote(str(value))
 
 
 def verify_stage_artifact(
@@ -1839,9 +1922,17 @@ def main() -> None:
 
     st.sidebar.divider()
     pages = WORKFLOW_PAGES + ["Outputs"]
+    query_page = selected_stage_from_query()
+    if query_page in pages:
+        st.session_state.workspace_page = query_page
+
     pending_page = st.session_state.get("pending_workspace_page", "")
     if pending_page in pages:
         st.session_state.workspace_page = pending_page
+        try:
+            st.query_params["stage"] = pending_page
+        except Exception:
+            pass
     st.session_state.pending_workspace_page = ""
     if st.session_state.workspace_page not in pages:
         st.session_state.workspace_page = "Config Wizard"
