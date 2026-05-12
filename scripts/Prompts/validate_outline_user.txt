@@ -1,11 +1,10 @@
-PROJECT_CONTEXT:
 VIDEO_TITLE:
 ${video_title}
 
-EXPECTED_SECTION_COUNT:
-${n_section}
+SECTION_OUTLINE_JSON:
+${outline_json}
 
-ORIGINAL_USER_SECTION_GUIDELINES:
+USER_SECTION_GUIDELINES:
 ${section_guidelines_json}
 
 NARRATION_STYLE_REQUIREMENTS:
@@ -16,10 +15,3 @@ ${historical_context}
 
 CHARACTER_CANON:
 ${characters_json}
-
-TASK:
-Apply the system criteria to the outline JSON below.
-Return the revised JSON only.
-
-ORIGINAL_OUTLINE_JSON:
-${outline_json}

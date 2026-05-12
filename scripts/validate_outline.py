@@ -1,6 +1,6 @@
 """validate_outline.py
 
-DeepSeek validator for generated section outlines.
+DeepSeek reviser for generated section outlines.
 
 Inputs:
     - outputs/output_jsons/outline_texts.json
@@ -8,8 +8,8 @@ Inputs:
 
 Output:
     - outputs/output_jsons/outline_texts.json, rewritten with the same JSON structure
-      after validation and editing
-    - outputs/output_jsons/outline_texts.before_outline_validation_*.json backup
+      after revision and editing
+    - outputs/output_jsons/outline_texts.before_outline_revision_*.json backup
 
 Usage:
     python validate_outline.py <project_name>
@@ -63,10 +63,10 @@ def main():
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         config=config,
-        label="outline_validation",
+        label="outline_revision",
     )
 
-    print(f"[OK] Outline validated with {result['model']}")
+    print(f"[OK] Outline revised with {result['model']}")
     print(f"[OK] Backup saved to {result['backup_path']}")
     print(f"[OK] Updated JSON saved to {result['json_path']}")
 

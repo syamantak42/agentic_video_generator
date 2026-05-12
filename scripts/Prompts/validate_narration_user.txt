@@ -1,25 +1,12 @@
-PROJECT_CONTEXT:
 VIDEO_TITLE:
 ${video_title}
 
-EXPECTED_SECTION_COUNT:
-${n_section}
+YOUTUBE_SCRIPT_JSON:
+${sections_json}
 
 NARRATION_STYLE_REQUIREMENTS:
 ${narration_style_json}
 
-HISTORICAL_OR_SUBJECT_CONTEXT:
-${historical_context}
 
-CHARACTER_CANON:
-${characters_json}
 
-VALIDATED_OUTLINE_JSON_IF_AVAILABLE:
-${outline_json}
 
-TASK:
-Apply the system criteria to the narration JSON below.
-Return the revised JSON only.
-
-ORIGINAL_NARRATION_JSON:
-${narration_json}

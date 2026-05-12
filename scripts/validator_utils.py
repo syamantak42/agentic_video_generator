@@ -228,3 +228,45 @@ def validate_json_with_deepseek(json_path, system_prompt, user_prompt, config, l
         "json_path": str(json_path),
         "backup_path": str(backup_path),
     }
+
+
+def validate_json_field_with_deepseek(json_path, field_name, system_prompt, user_prompt, config, label):
+    """Validate and rewrite one JSON field, preserving the rest of the file exactly."""
+    json_path = Path(json_path)
+    original = read_json(json_path)
+    if not isinstance(original, dict):
+        raise ValueError(f"Expected object at {json_path} so field '{field_name}' can be updated.")
+    if field_name not in original:
+        raise KeyError(f"Missing field '{field_name}' in {json_path}")
+
+    original_field = original[field_name]
+    client = get_deepseek_client()
+    model = get_validator_model(config)
+
+    response = create_deepseek_chat_completion(
+        client,
+        model=model,
+        temperature=0.2,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    content = response.choices[0].message.content.strip()
+    candidate = parse_llm_json(content)
+    assert_same_structure(original_field, candidate, path=f"$.{field_name}")
+    normalized_field = normalize_to_original_order(original_field, candidate)
+
+    updated = dict(original)
+    updated[field_name] = normalized_field
+    updated = clean_json_text(updated)
+
+    backup_path = backup_json(json_path, label)
+    atomic_write_json(json_path, updated)
+
+    return {
+        "model": model,
+        "json_path": str(json_path),
+        "backup_path": str(backup_path),
+    }

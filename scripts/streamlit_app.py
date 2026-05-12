@@ -41,9 +41,9 @@ OUTPUT_FOLDERS = [
 
 SCRIPT_STAGES = [
     ("Generate Outline", "generate_sections.py", "outline_texts.json"),
-    ("Validate Outline", "validate_outline.py", "outline_texts.json"),
+    ("Revise Outline", "validate_outline.py", "outline_texts.json"),
     ("Generate Narration", "generate_script.py", "narration.json"),
-    ("Validate Narration", "validate_narration.py", "narration.json"),
+    ("Revise Narration", "validate_narration.py", "narration.json"),
 ]
 
 IMAGE_PROMPT_STAGE = ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json")
@@ -434,7 +434,7 @@ def default_config(project: str) -> dict:
         "_project_config": {
             "project_name": project,
             "image_config": {"model": "seedream-v4"},
-            "narration_config": {"words_per_section": 400},
+            "narration_config": {"words_per_section": 400, "frames_per_section": 2},
             "validator_config": {"model": DEFAULT_DEEPSEEK_MODEL},
             "tts_config": {"model": "kokoro", "voice_id": "af"},
         },
@@ -447,13 +447,14 @@ def ensure_config_defaults(config: dict, project: str) -> dict:
     if not isinstance(project_config.get("image_config"), dict):
         project_config["image_config"] = {"model": "seedream-v4"}
     if not isinstance(project_config.get("narration_config"), dict):
-        project_config["narration_config"] = {"words_per_section": 400}
+        project_config["narration_config"] = {"words_per_section": 400, "frames_per_section": 2}
     if not isinstance(project_config.get("validator_config"), dict):
         project_config["validator_config"] = {"model": DEFAULT_DEEPSEEK_MODEL}
     if not isinstance(project_config.get("tts_config"), dict):
         project_config["tts_config"] = {"model": "kokoro", "voice_id": "af"}
     project_config["image_config"].setdefault("model", "seedream-v4")
     project_config["narration_config"].setdefault("words_per_section", 400)
+    project_config["narration_config"].setdefault("frames_per_section", 2)
     project_config["validator_config"].setdefault("model", DEFAULT_DEEPSEEK_MODEL)
     project_config["tts_config"].setdefault("model", "kokoro")
     project_config["tts_config"].setdefault("voice_id", "af")
@@ -815,7 +816,7 @@ def run_script(script_name: str, project: str, extra_args: list[str] | None = No
 def artifact_location(project: str, expected: str | None) -> Path | None:
     if not expected:
         return None
-    if expected.endswith(".json"):
+    if expected in {"outline_texts.json", "narration.json"}:
         return output_dir(project, "output_jsons") / expected
     if expected == "clips":
         return output_dir(project, "clips")
@@ -826,9 +827,9 @@ def artifact_location(project: str, expected: str | None) -> Path | None:
 
 def stage_success_text(label: str, expected: str | None) -> str:
     if expected == "outline_texts.json":
-        return "Outline generated." if "Generate" in label else "Outline validated."
+        return "Outline generated." if "Generate" in label else "Outline revised."
     if expected == "narration.json":
-        return "Narration generated." if "Generate" in label else "Narration validated."
+        return "Narration generated." if "Generate" in label else "Narration revised."
     if expected == "image_prompts.json":
         return "Image prompts generated."
     if expected == "tts_index.json":
@@ -1387,6 +1388,13 @@ def render_config_wizard(project: str) -> None:
                 step=50,
                 value=int(narration_config.get("words_per_section", 400)),
             )
+            frames_per_section = st.number_input(
+                "Tentative frames per section",
+                min_value=1,
+                max_value=12,
+                step=1,
+                value=int(narration_config.get("frames_per_section", 2)),
+            )
             aesthetic_style = st.text_area("Aesthetic style", value=config.get("aesthetic_style", ""), height=110)
             with st.expander("Advanced", expanded=False):
                 historical_context = st.text_area("Historical context", value=config.get("historical_context", ""), height=100)
@@ -1406,7 +1414,8 @@ def render_config_wizard(project: str) -> None:
                 config["section_outlines"] = split_lines(updated)
                 config["narration_style"] = split_lines(narration_style)
                 config["_project_config"]["narration_config"] = {
-                    "words_per_section": int(words_per_section)
+                    "words_per_section": int(words_per_section),
+                    "frames_per_section": int(frames_per_section),
                 }
                 config["aesthetic_style"] = aesthetic_style.strip()
                 config["historical_context"] = historical_context.strip()
@@ -1572,8 +1581,8 @@ def render_script_generation(project: str) -> None:
                 st.error(detail)
                 return
             st.write(f"section outlines generated and saved at {outline_path}.")
-            st.write("validating section outlines")
-            ok, detail = run_stage_quiet(project, "Validate Section Outlines", "validate_outline.py", "outline_texts.json")
+            st.write("revising section outlines")
+            ok, detail = run_stage_quiet(project, "Revise Section Outlines", "validate_outline.py", "outline_texts.json")
             if not ok:
                 st.error(detail)
                 return
@@ -1589,8 +1598,8 @@ def render_script_generation(project: str) -> None:
                 st.error(detail)
                 return
             st.write(f"full script generated and saved at {narration_path}.")
-            st.write("validating full script")
-            ok, detail = run_stage_quiet(project, "Validate Full Script", "validate_narration.py", "narration.json")
+            st.write("revising full script")
+            ok, detail = run_stage_quiet(project, "Revise Full Script", "validate_narration.py", "narration.json")
             if not ok:
                 st.error(detail)
                 return
@@ -1706,7 +1715,6 @@ def render_video_generation(project: str) -> None:
             + ", ".join(format_media_key(key) for key in sorted(audio_keys - image_keys))
         )
 
-    st.markdown("<div class='stage-row'><strong>Generate Clips</strong></div>", unsafe_allow_html=True)
     clip_mode = st.radio(
         "Clip selection",
         ["Missing clips", "All clips", "Range", "Specific clips"],
@@ -1761,7 +1769,7 @@ def render_video_generation(project: str) -> None:
         st.error(selection_error)
 
     can_generate_clips = bool(matched_keys) and not selection_error and bool(selected_clip_keys)
-    if st.button("Run Generate Clips", key="run_generate_clips_selected", width="stretch", disabled=not can_generate_clips):
+    if st.button("Generate Clips", key="run_generate_clips_selected", width="stretch", disabled=not can_generate_clips):
         run_stage(
             project,
             "Generate Clips",
@@ -1771,8 +1779,7 @@ def render_video_generation(project: str) -> None:
             expected_clip_keys=selected_clip_keys,
         )
 
-    st.markdown("<div class='stage-row'><strong>Compose Final Video</strong></div>", unsafe_allow_html=True)
-    if st.button("Run Compose Final Video", key="run_make_video.py", width="stretch"):
+    if st.button("Compose Final Video", key="run_make_video.py", width="stretch"):
         run_stage(project, "Compose Final Video", "make_video.py", "videos")
 
 

@@ -484,11 +484,16 @@ try:
     words_per_section = int(narration_config.get("words_per_section", 400))
 except (TypeError, ValueError):
     words_per_section = 400
+try:
+    frames_per_section = max(1, int(narration_config.get("frames_per_section", 2)))
+except (TypeError, ValueError):
+    frames_per_section = 2
 n_section = config["n_section"]
 reference_links = config["reference_links"]
 print(
     f"title: {video_title}\n narration_style: {narration_style}\n"
     f"Sections expected: {n_section}\nTentative words per section: {words_per_section}\n"
+    f"Tentative frames per section: {frames_per_section} to {frames_per_section + 1}\n"
 )
 
 # Prepare chunks
@@ -574,6 +579,8 @@ system_prompt = render_prompt(
     n_section=n_section,
     narration_style=narration_style,
     words_per_section=words_per_section,
+    frames_per_section=frames_per_section,
+    max_frames_per_section=frames_per_section + 1,
 )
 # Generate narration JSONs
 responses = chat_with_llm(system_prompt, queries, outline_data, my_tkn)

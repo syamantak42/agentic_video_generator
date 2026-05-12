@@ -40,7 +40,8 @@
       "model": "seedream-v4"
     },
     "narration_config": {
-      "words_per_section": 400
+      "words_per_section": 400,
+      "frames_per_section": 2
     },
     "validator_config": {
       "model": "deepseek-v4-flash"

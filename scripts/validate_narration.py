@@ -1,6 +1,6 @@
 """validate_narration.py
 
-DeepSeek validator for generated narration scripts.
+DeepSeek reviser for generated narration scripts.
 
 Inputs:
     - outputs/output_jsons/narration.json
@@ -9,8 +9,8 @@ Inputs:
 
 Output:
     - outputs/output_jsons/narration.json, rewritten with the same JSON structure
-      after validation and editing
-    - outputs/output_jsons/narration.before_narration_validation_*.json backup
+      after revision and editing
+    - outputs/output_jsons/narration.before_narration_revision_*.json backup
 
 Usage:
     python validate_narration.py <project_name>
@@ -21,7 +21,7 @@ import os
 
 from console_utils import configure_utf8_output
 from prompt_loader import load_prompt, render_prompt
-from validator_utils import load_project_config, read_json, validate_json_with_deepseek
+from validator_utils import load_project_config, read_json, validate_json_field_with_deepseek
 
 configure_utf8_output()
 
@@ -32,6 +32,7 @@ def build_prompts(config, narration_data, outline_data):
     historical_context = config.get("historical_context", "")
     characters = config.get("characters", {})
     n_section = config.get("n_section", narration_data.get("n_sections", ""))
+    sections_data = narration_data.get("sections", [])
 
     system_prompt = load_prompt("validate_narration_system.txt")
     user_prompt = render_prompt(
@@ -42,7 +43,7 @@ def build_prompts(config, narration_data, outline_data):
         historical_context=historical_context,
         characters_json=json.dumps(characters, ensure_ascii=False, indent=2),
         outline_json=json.dumps(outline_data, ensure_ascii=False, indent=2),
-        narration_json=json.dumps(narration_data, ensure_ascii=False, indent=2),
+        sections_json=json.dumps(sections_data, ensure_ascii=False, indent=2),
     )
 
     return system_prompt, user_prompt
@@ -62,15 +63,16 @@ def main():
     outline_data = read_json(outline_path) if os.path.exists(outline_path) else {}
 
     system_prompt, user_prompt = build_prompts(config, narration_data, outline_data)
-    result = validate_json_with_deepseek(
+    result = validate_json_field_with_deepseek(
         json_path=narration_path,
+        field_name="sections",
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         config=config,
-        label="narration_validation",
+        label="narration_revision",
     )
 
-    print(f"[OK] Narration validated with {result['model']}")
+    print(f"[OK] Narration revised with {result['model']}")
     print(f"[OK] Backup saved to {result['backup_path']}")
     print(f"[OK] Updated JSON saved to {result['json_path']}")
 
