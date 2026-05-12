@@ -4,7 +4,7 @@ Module for generating and curating images from prompts using FAL AI API.
 
 Description:
     Interactive image generation and quality control interface. Reads image prompts from JSON,
-    generates images using FAL AI's ByteDance SeedDream model, and allows interactive approval/
+    generates images using the configured FAL AI image model, and allows interactive approval/
     rejection with optional prompt modification. Generates high-resolution images (2048x1152)
     with manual review pipeline.
 
@@ -42,6 +42,19 @@ import requests
 from console_utils import configure_utf8_output
 
 configure_utf8_output()
+
+
+def load_image_model_map():
+    path = os.path.join(SCRIPT_DIR, "image_models.txt")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("image_models.txt must contain a JSON dictionary.")
+    return {
+        str(label).strip(): str(model_id).strip()
+        for label, model_id in data.items()
+        if str(label).strip() and str(model_id).strip()
+    }
 
 # --------------------------------------------------------
 # Helper: Get project name and paths from config
@@ -81,12 +94,8 @@ project_root = os.path.dirname(source_dir)
 
 # image model config (default: seedream-v4)
 image_cfg = config.get("_project_config", {}).get("image_config", {})
-image_model_key = image_cfg.get("model", "seedream-v4").strip().lower()
-IMAGE_MODEL_MAP = {
-    "seedream-v4": "fal-ai/bytedance/seedream/v4/text-to-image",
-    "seedream_v4": "fal-ai/bytedance/seedream/v4/text-to-image",
-}
-IMAGE_MODEL = IMAGE_MODEL_MAP.get(image_model_key, image_model_key)
+image_model_key = (image_cfg.get("model", "seedream-v4") or "seedream-v4").strip()
+IMAGE_MODEL = load_image_model_map().get(image_model_key, image_model_key)
 print(f"[IMAGE MODEL] {IMAGE_MODEL}")
 
 # optional args
@@ -172,7 +181,7 @@ def generate_image(prompt):
         ValueError: If API returns no images
     
     Notes:
-        - Uses ByteDance SeedDream v4 model
+        - Uses the image model configured in source_material/config.json
         - Safety checker disabled for creative content
         - Prompt enhancement set to standard mode
     """

@@ -1,0 +1,5 @@
+{
+  "seedream-v4": "fal-ai/bytedance/seedream/v4/text-to-image",
+  "seedream-v4.5": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+  "flux-2-pro": "fal-ai/flux-2-pro/text-to-image"
+}

@@ -32,6 +32,7 @@ import re
 from dotenv import load_dotenv
 from openai import OpenAI
 from console_utils import configure_utf8_output
+from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, create_deepseek_chat_completion, get_deepseek_model
 from prompt_loader import render_prompt
 from text_utils import clean_json_text, clean_text
 
@@ -71,9 +72,11 @@ if not API_KEY:
     raise ValueError("Missing DEEPSEEK_API_KEY in .env file")
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+MODEL_NAME = DEFAULT_DEEPSEEK_MODEL
 
 # --------------------------- Paths -----------------------------
 project, source_dir, config = load_project_config()
+MODEL_NAME = get_deepseek_model(config)
 # base directories relative to this script
 project_root = os.path.dirname(source_dir)
 SCRIPTS_DIR = os.path.join(project_root, "outputs", "output_jsons")
@@ -200,8 +203,9 @@ def summarize_single_prompt(client_, prompt_text: str) -> str:
         "generate_image_prompts_summary_user.txt",
         prompt_text=prompt_text,
     )
-    resp = client_.chat.completions.create(
-        model="deepseek-chat",
+    resp = create_deepseek_chat_completion(
+        client_,
+        model=MODEL_NAME,
         temperature=0.2,
         messages=[{"role": "user", "content": prompt.strip()}],
     )
@@ -245,8 +249,9 @@ def generate_image_prompt(
         prior_visuals=prior_visuals,
     )
 
-    resp = client_.chat.completions.create(
-        model="deepseek-chat",
+    resp = create_deepseek_chat_completion(
+        client_,
+        model=MODEL_NAME,
         temperature=1.3,
         messages=[
             {"role": "system", "content": sys_prompt},

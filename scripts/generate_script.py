@@ -26,7 +26,7 @@ Environment Variables:
 Configuration:
     - MIN_CHUNK_SIZE: 1000 characters per semantic chunk
     - FAISS model: 'BAAI/bge-large-en-v1.5' (semantic embeddings)
-    - LLM model: 'deepseek-chat' / 'deepseek-reasoner' (for narration generation)
+    - LLM model: configured DeepSeek model (default: deepseek-v4-flash)
     - Temperature: 1.2 (creative generation)
 
 Usage:
@@ -53,6 +53,7 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import time
 from console_utils import configure_utf8_output
+from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, create_deepseek_chat_completion, get_deepseek_model
 from prompt_loader import render_prompt
 from text_utils import clean_json_text
 
@@ -85,7 +86,7 @@ def load_project_config(project_arg=None):
 # ========================================================
 # ------------------ CONFIGURATION -----------------------
 # ========================================================
-MODEL_NAME = "deepseek-reasoner" # LLM for narration generation: "deepseek-chat" "deepseek-reasoner
+MODEL_NAME = DEFAULT_DEEPSEEK_MODEL
 RETRIEVAL_MODEL = "BAAI/bge-small-en-v1.5"
 MIN_CHUNK_SIZE = 1000
 
@@ -98,6 +99,7 @@ if not my_tkn:
     raise ValueError("Missing DEEPSEEK_API_KEY in .env file")
 
 project, source_dir, config = load_project_config()
+MODEL_NAME = get_deepseek_model(config)
 project_root = os.path.dirname(source_dir)
 json_dir = os.path.join(project_root, "outputs", "output_jsons")
 os.makedirs(json_dir, exist_ok=True)
@@ -374,7 +376,8 @@ def update_story_summary(client, story_summary, new_response):
         story_summary=story_summary,
         new_response=new_response,
     )
-    summary_resp = client.chat.completions.create(
+    summary_resp = create_deepseek_chat_completion(
+        client,
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -440,7 +443,8 @@ FULL_OUTLINE_WITH_STATUS:
             {"role": "user", "content": contextual_query},
         ]
 
-        response = client.chat.completions.create(
+        response = create_deepseek_chat_completion(
+            client,
             model=MODEL_NAME,
             temperature=1.2,
             messages=messages,

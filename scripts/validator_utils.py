@@ -10,10 +10,15 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from deepseek_utils import (
+    DEFAULT_DEEPSEEK_MODEL,
+    create_deepseek_chat_completion,
+    get_deepseek_model,
+)
 from text_utils import clean_json_text
 
 
-DEFAULT_VALIDATOR_MODEL = "deepseek-chat"
+DEFAULT_VALIDATOR_MODEL = DEFAULT_DEEPSEEK_MODEL
 
 
 def load_project_config(project_arg=None):
@@ -47,12 +52,7 @@ def get_deepseek_client():
 
 
 def get_validator_model(config):
-    validator_config = config.get("_project_config", {}).get("validator_config", {})
-    return (
-        validator_config.get("model")
-        or os.getenv("DEEPSEEK_VALIDATOR_MODEL")
-        or DEFAULT_VALIDATOR_MODEL
-    )
+    return os.getenv("DEEPSEEK_VALIDATOR_MODEL") or get_deepseek_model(config)
 
 
 def read_json(path):
@@ -204,7 +204,8 @@ def validate_json_with_deepseek(json_path, system_prompt, user_prompt, config, l
     client = get_deepseek_client()
     model = get_validator_model(config)
 
-    response = client.chat.completions.create(
+    response = create_deepseek_chat_completion(
+        client,
         model=model,
         temperature=0.2,
         messages=[

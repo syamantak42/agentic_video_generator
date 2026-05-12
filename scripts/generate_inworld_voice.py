@@ -18,8 +18,8 @@ Environment Variables:
     - INWORLD_API_KEY: API key for Inworld TTS service (Base64 encoded if required)
 
 Configuration:
-    - VOICE_ID: 'Hades' (voice character)
-    - MODEL_ID: 'inworld-tts-1-max' (highest quality model)
+    - VOICE_ID: selected in source_material/config.json
+    - MODEL_ID: selected in source_material/config.json
     - TEMPERATURE: 1.0 (vocal variation/expressiveness)
     - SPEAKING_RATE: 1.0 (normal speed)
 
@@ -92,10 +92,12 @@ OUTPUT_DIR = os.path.join(project_root, "outputs", "audios")
 # ---------------- Configuration ----------------
 
 tts_config = config.get("_project_config", {}).get("tts_config", {})
-VOICE_ID = tts_config.get("voice_id", "Ashley")
-MODEL_ID = "inworld-tts-1-max"
+VOICE_ID = (tts_config.get("voice_id", "Ashley") or "Ashley").strip()
+MODEL_ID = (tts_config.get("model", "inworld-tts-1.5-max") or "inworld-tts-1.5-max").strip()
+if MODEL_ID == "inworld":
+    MODEL_ID = "inworld-tts-1.5-max"
 TEMPERATURE = 1.0
-SPEAKING_RATE = 0.8
+SPEAKING_RATE = 1.0
 
 # ------------------------------------------------
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -283,6 +285,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

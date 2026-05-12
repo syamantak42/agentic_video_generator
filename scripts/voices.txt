@@ -1,0 +1,6 @@
+{
+  "af": false,
+  "af_heart": false,
+  "Ashley": true,
+  "Hades": true
+}

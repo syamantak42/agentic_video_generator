@@ -21,6 +21,7 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 import streamlit as st
+from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_MODEL_CHOICES
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -37,11 +38,6 @@ OUTPUT_FOLDERS = [
     "clips",
     "videos",
 ]
-
-IMAGE_MODEL_MAP = {
-    "seedream-v4": "fal-ai/bytedance/seedream/v4/text-to-image",
-    "seedream_v4": "fal-ai/bytedance/seedream/v4/text-to-image",
-}
 
 SCRIPT_STAGES = [
     ("Generate Outline", "generate_sections.py", "outline_texts.json"),
@@ -162,6 +158,14 @@ def inject_css() -> None:
             word-break: break-all;
         }
 
+        .wizard-step-title {
+            color: var(--ink);
+            font-size: 1.45rem;
+            font-weight: 850;
+            line-height: 1.25;
+            margin: 10px 0 18px 0;
+        }
+
         .stage-row {
             border: 1px solid var(--line);
             border-radius: 8px;
@@ -189,6 +193,23 @@ def inject_css() -> None:
             background: #263a57;
             color: #88a5bd;
             border-color: #385372;
+        }
+
+        div.stButton > button[kind="primary"] {
+            background: #8b0000;
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, .24);
+            font-size: 1.48rem;
+            font-weight: 950;
+            min-height: 4.25rem;
+            box-shadow: 0 18px 42px rgba(139, 0, 0, .30);
+        }
+
+        div.stButton > button[kind="primary"]:disabled {
+            background: #3a3048;
+            color: #a99bb7;
+            border-color: #544664;
+            box-shadow: none;
         }
 
         section[data-testid="stSidebar"] {
@@ -414,7 +435,7 @@ def default_config(project: str) -> dict:
             "project_name": project,
             "image_config": {"model": "seedream-v4"},
             "narration_config": {"words_per_section": 400},
-            "validator_config": {"model": "deepseek-chat"},
+            "validator_config": {"model": DEFAULT_DEEPSEEK_MODEL},
             "tts_config": {"model": "kokoro", "voice_id": "af"},
         },
     }
@@ -428,12 +449,12 @@ def ensure_config_defaults(config: dict, project: str) -> dict:
     if not isinstance(project_config.get("narration_config"), dict):
         project_config["narration_config"] = {"words_per_section": 400}
     if not isinstance(project_config.get("validator_config"), dict):
-        project_config["validator_config"] = {"model": "deepseek-chat"}
+        project_config["validator_config"] = {"model": DEFAULT_DEEPSEEK_MODEL}
     if not isinstance(project_config.get("tts_config"), dict):
         project_config["tts_config"] = {"model": "kokoro", "voice_id": "af"}
     project_config["image_config"].setdefault("model", "seedream-v4")
     project_config["narration_config"].setdefault("words_per_section", 400)
-    project_config["validator_config"].setdefault("model", "deepseek-chat")
+    project_config["validator_config"].setdefault("model", DEFAULT_DEEPSEEK_MODEL)
     project_config["tts_config"].setdefault("model", "kokoro")
     project_config["tts_config"].setdefault("voice_id", "af")
     return config
@@ -528,6 +549,59 @@ def characters_to_text(characters: dict) -> str:
     return "\n".join(f"{name}: {desc}" for name, desc in characters.items())
 
 
+def load_image_model_map() -> dict[str, str]:
+    path = SCRIPT_DIR / "image_models.txt"
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("image_models.txt must contain a JSON dictionary.")
+    return {str(label).strip(): str(model_id).strip() for label, model_id in data.items() if str(label).strip() and str(model_id).strip()}
+
+
+def image_model_label_for_config(value: str) -> str:
+    model_map = load_image_model_map()
+    value = (value or "seedream-v4").strip()
+    if value in model_map:
+        return value
+    for label, model_id in model_map.items():
+        if value == model_id:
+            return label
+    return value
+
+
+def load_voice_map() -> dict[str, bool]:
+    path = SCRIPT_DIR / "voices.txt"
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("voices.txt must contain a JSON dictionary.")
+    return {str(voice).strip(): bool(is_inworld) for voice, is_inworld in data.items() if str(voice).strip()}
+
+
+def normalized_tts_model(value: str | None) -> str:
+    model = (value or "kokoro").strip().lower()
+    if model == "inworld":
+        return "inworld-tts-1.5-max"
+    if model in {"kokoro", "inworld-tts-1.5-max", "inworld-tts-2"}:
+        return model
+    return "kokoro"
+
+
+def voice_options_for_tts_model(tts_model: str) -> list[str]:
+    use_inworld = normalized_tts_model(tts_model).startswith("inworld-tts-")
+    voices = [voice for voice, is_inworld in load_voice_map().items() if is_inworld == use_inworld]
+    fallback = ["Ashley"] if use_inworld else ["af"]
+    return voices or fallback
+
+
+def selectbox_options_with_current(options: list[str], current: str, fallback: str) -> tuple[list[str], str]:
+    normalized = list(dict.fromkeys(options))
+    selected = current or fallback
+    if selected not in normalized:
+        normalized.append(selected)
+    return normalized, selected
+
+
 def safe_filename_from_url(url: str, fallback_ext: str = "") -> str:
     parsed = urlparse(url)
     name = unquote(Path(parsed.path).name).strip()
@@ -605,11 +679,11 @@ def config_warnings(config: dict) -> list[str]:
         warnings.append("Video title is empty or still a template value.")
     section_outlines = config.get("section_outlines", [])
     if not section_outlines:
-        warnings.append("No section outlines are saved.")
+        warnings.append("No guidelines are saved.")
     elif any("Section 1: Opening and introduction" in str(item) for item in section_outlines):
-        warnings.append("Section outlines still look like template defaults.")
+        warnings.append("Guidelines still look like template defaults.")
     if not config.get("narration_style", []):
-        warnings.append("No narration style rules are saved.")
+        warnings.append("No narration style is saved.")
     if not config.get("aesthetic_style", "").strip():
         warnings.append("Aesthetic style is empty.")
     if not config.get("_project_config", {}).get("project_name"):
@@ -1032,14 +1106,12 @@ def verify_stage_artifact(
 
 
 def tts_script_for_config(config: dict) -> str:
-    model = (
+    model = normalized_tts_model(
         config.get("_project_config", {})
         .get("tts_config", {})
         .get("model", "kokoro")
-        .strip()
-        .lower()
     )
-    if model == "inworld":
+    if model.startswith("inworld-tts-"):
         return "generate_inworld_voice.py"
     return "generate_kokoro_voice.py"
 
@@ -1083,6 +1155,26 @@ def run_stage(
         return False
 
 
+def run_stage_quiet(
+    project: str,
+    label: str,
+    script_name: str,
+    expected_output: str | None = None,
+) -> tuple[bool, str]:
+    with st.spinner(f"Running {label}..."):
+        code, log = run_script(script_name, project)
+    if code != 0:
+        recent_log = "\n".join(log.splitlines()[-40:])
+        return False, f"{label} failed with exit code {code}.\n{recent_log}".strip()
+
+    ok, message = verify_stage_artifact(project, expected_output)
+    if not ok:
+        recent_log = "\n".join(log.splitlines()[-40:])
+        detail = "\n".join(part for part in [message, recent_log] if part)
+        return False, detail or f"{label} finished but output validation failed."
+    return True, ""
+
+
 def load_image_prompt_items(project: str) -> list[dict]:
     path = output_dir(project, "output_jsons") / "image_prompts.json"
     if not path.exists():
@@ -1109,14 +1201,13 @@ def load_image_prompt_items(project: str) -> list[dict]:
 
 
 def image_model_for_config(config: dict) -> str:
-    model_key = (
+    model_value = (
         config.get("_project_config", {})
         .get("image_config", {})
         .get("model", "seedream-v4")
-        .strip()
-        .lower()
     )
-    return IMAGE_MODEL_MAP.get(model_key, model_key)
+    model_value = (model_value or "seedream-v4").strip()
+    return load_image_model_map().get(model_value, model_value)
 
 
 def generate_image_with_fal(prompt: str, config: dict) -> Image.Image:
@@ -1241,109 +1332,53 @@ def render_project_selector() -> str:
     return st.session_state.selected_project
 
 
-def step_controls(total_steps: int) -> None:
-    st.caption("Use the step's Save and continue button to write changes before moving forward.")
-    if st.button("Previous", disabled=st.session_state.config_step == 0):
-        st.session_state.config_step = max(0, st.session_state.config_step - 1)
-        rerun_app()
+def wizard_form_nav(next_label: str, previous_disabled: bool = False) -> tuple[bool, bool]:
+    left, right = st.columns([1, 2])
+    with left:
+        previous = st.form_submit_button("Previous", disabled=previous_disabled, width="stretch")
+    with right:
+        submitted = st.form_submit_button(next_label, width="stretch")
+    return previous, submitted
+
+
+def wizard_button_nav(next_label: str, previous_disabled: bool = False) -> tuple[bool, bool]:
+    left, right = st.columns([1, 2])
+    with left:
+        previous = st.button("Previous", disabled=previous_disabled, width="stretch")
+    with right:
+        submitted = st.button(next_label, width="stretch")
+    return previous, submitted
 
 
 def render_config_wizard(project: str) -> None:
     config = load_config(project)
-    steps = ["Basics", "Outline", "Sources", "Voice", "Visuals", "Review"]
+    steps = ["Content", "Sources", "Models"]
+    if st.session_state.config_step >= len(steps):
+        st.session_state.config_step = len(steps) - 1
 
     st.subheader("Configuration Wizard")
     st.progress((st.session_state.config_step + 1) / len(steps))
-    st.caption(f"Step {st.session_state.config_step + 1} of {len(steps)}: {steps[st.session_state.config_step]}")
+    st.markdown(
+        f"<div class='wizard-step-title'>Step {st.session_state.config_step + 1} of {len(steps)}: {steps[st.session_state.config_step]}</div>",
+        unsafe_allow_html=True,
+    )
 
     step = st.session_state.config_step
 
     if step == 0:
-        with st.form("basics_form"):
+        narration_config = config.get("_project_config", {}).get("narration_config", {})
+        with st.form("content_form"):
             title = st.text_input("Video title", value=config.get("video_title", ""))
             n_section = st.number_input("Number of sections", min_value=1, max_value=30, value=int(config.get("n_section", 6)))
-            historical_context = st.text_area("Historical or subject context", value=config.get("historical_context", ""), height=110)
-
-            submitted = st.form_submit_button("Save basics and continue", width="stretch")
-            if submitted:
-                config["video_title"] = title.strip()
-                config["n_section"] = int(n_section)
-                config["historical_context"] = historical_context.strip()
-                config["_project_config"]["project_name"] = project
-                save_config(project, config)
-                st.success("Basics saved.")
-                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
-                rerun_app()
-
-    elif step == 1:
-        outlines = config.get("section_outlines", [])
-        outline_text = "\n".join(outlines)
-        with st.form("outline_form"):
-            st.caption("Write one section guideline per line. The generation script will turn these into structured sections.")
-            updated = st.text_area("Section guidelines", value=outline_text, height=340)
-            submitted = st.form_submit_button("Save outline and continue", width="stretch")
-            if submitted:
-                config["section_outlines"] = split_lines(updated)
-                config["n_section"] = len(config["section_outlines"])
-                save_config(project, config)
-                st.success(f"Saved {len(config['section_outlines'])} section guidelines.")
-                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
-                rerun_app()
-
-    elif step == 2:
-        st.caption("PDF and TXT links are downloaded into source_material. HTML and Wikipedia links stay as reference links for retrieval.")
-        uploaded = st.file_uploader("Upload PDFs or TXT files", type=["pdf", "txt"], accept_multiple_files=True)
-        link_text = st.text_area("Reference links or downloadable PDF/TXT links", value="\n".join(config.get("reference_links", [])), height=180)
-
-        if st.button("Save sources and continue", width="stretch"):
-            uploaded_files = save_uploaded_sources(project, uploaded)
-            references: list[str] = []
-            downloaded: list[str] = uploaded_files[:]
-            results: list[str] = []
-
-            for filename in uploaded_files:
-                results.append(f"Uploaded: {filename}")
-
-            for url in split_lines(link_text):
-                try:
-                    saved_name = download_source_link(url, project)
-                    if saved_name:
-                        downloaded.append(saved_name)
-                        results.append(f"Downloaded: {saved_name}")
-                    elif "wikipedia.org/wiki/" in url.lower():
-                        references.append(url)
-                        results.append(f"Wikipedia reference link: {url}")
-                    else:
-                        references.append(url)
-                        results.append(f"Reference link: {url}")
-                except Exception as exc:
-                    references.append(url)
-                    results.append(f"Kept as reference after download failure: {url} ({exc})")
-
-            config["reference_links"] = list(dict.fromkeys(references))
-            config["source_material"] = list(dict.fromkeys(config.get("source_material", []) + downloaded))
-            config["intro_material"] = list(dict.fromkeys(config.get("intro_material", []) + downloaded))
-            save_config(project, config)
-            st.session_state.link_results = results
-            st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
-            rerun_app()
-
-        for result in st.session_state.link_results:
-            st.write(result)
-
-        with st.expander("Current source_material folder", expanded=False):
-            files = sorted(p.name for p in source_dir(project).glob("*") if p.is_file())
-            st.code("\n".join(files) if files else "No files yet.", language="text")
-
-    elif step == 3:
-        tts_config = config.get("_project_config", {}).get("tts_config", {})
-        validator_config = config.get("_project_config", {}).get("validator_config", {})
-        narration_config = config.get("_project_config", {}).get("narration_config", {})
-        with st.form("voice_form"):
+            updated = st.text_area(
+                "Guidelines",
+                value="\n".join(config.get("section_outlines", [])),
+                height=220,
+            )
             narration_style = st.text_area(
-                "Narration style rules",
+                "Narration Style",
                 value="\n".join(config.get("narration_style", [])),
-                height=190,
+                height=150,
             )
             words_per_section = st.number_input(
                 "Tentative words per section",
@@ -1352,52 +1387,143 @@ def render_config_wizard(project: str) -> None:
                 step=50,
                 value=int(narration_config.get("words_per_section", 400)),
             )
-            tts_model = st.selectbox(
-                "TTS model",
-                ["kokoro", "inworld"],
-                index=0 if tts_config.get("model", "kokoro").lower() != "inworld" else 1,
-            )
-            voice_id = st.text_input("Voice ID", value=tts_config.get("voice_id", "af"))
-            validator_model = st.text_input(
-                "DeepSeek validator model",
-                value=validator_config.get("model", "deepseek-chat"),
-            )
-            submitted = st.form_submit_button("Save voice settings and continue", width="stretch")
+            aesthetic_style = st.text_area("Aesthetic style", value=config.get("aesthetic_style", ""), height=110)
+            with st.expander("Advanced", expanded=False):
+                historical_context = st.text_area("Historical context", value=config.get("historical_context", ""), height=100)
+                characters = st.text_area(
+                    "Character canon, one per line as Name: visual description",
+                    value=characters_to_text(config.get("characters", {})),
+                    height=170,
+                )
+
+            previous, submitted = wizard_form_nav("Save & continue to Sources", previous_disabled=True)
+            if previous:
+                st.session_state.config_step = max(0, st.session_state.config_step - 1)
+                rerun_app()
             if submitted:
+                config["video_title"] = title.strip()
+                config["n_section"] = int(n_section)
+                config["section_outlines"] = split_lines(updated)
                 config["narration_style"] = split_lines(narration_style)
                 config["_project_config"]["narration_config"] = {
                     "words_per_section": int(words_per_section)
                 }
-                config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
-                config["_project_config"]["validator_config"] = {
-                    "model": validator_model.strip() or "deepseek-chat"
-                }
+                config["aesthetic_style"] = aesthetic_style.strip()
+                config["historical_context"] = historical_context.strip()
+                config["characters"] = parse_characters(characters)
+                config["_project_config"]["project_name"] = project
                 save_config(project, config)
-                st.success("Voice settings saved.")
+                st.success("Content saved.")
                 st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
                 rerun_app()
 
-    elif step == 4:
-        image_config = config.get("_project_config", {}).get("image_config", {})
-        with st.form("visual_form"):
-            aesthetic_style = st.text_area("Aesthetic style", value=config.get("aesthetic_style", ""), height=120)
-            characters = st.text_area(
-                "Character canon, one per line as Name: visual description",
-                value=characters_to_text(config.get("characters", {})),
-                height=220,
-            )
-            image_model = st.text_input("Image model", value=image_config.get("model", "seedream-v4"))
-            submitted = st.form_submit_button("Save visual settings and continue", width="stretch")
+    elif step == 1:
+        with st.form("sources_form"):
+            uploaded = st.file_uploader("Upload PDFs or TXT files", type=["pdf", "txt"], accept_multiple_files=True)
+            link_text = st.text_area("Reference links or downloadable PDF/TXT links", value="\n".join(config.get("reference_links", [])), height=180)
+
+            previous, submitted = wizard_form_nav("Save & continue to Models")
+            if previous:
+                st.session_state.config_step = max(0, st.session_state.config_step - 1)
+                rerun_app()
+
             if submitted:
-                config["aesthetic_style"] = aesthetic_style.strip()
-                config["characters"] = parse_characters(characters)
-                config["_project_config"]["image_config"] = {"model": image_model.strip() or "seedream-v4"}
+                uploaded_files = save_uploaded_sources(project, uploaded)
+                references: list[str] = []
+                downloaded: list[str] = uploaded_files[:]
+                results: list[str] = []
+
+                for filename in uploaded_files:
+                    results.append(f"Uploaded: {filename}")
+
+                for url in split_lines(link_text):
+                    try:
+                        saved_name = download_source_link(url, project)
+                        if saved_name:
+                            downloaded.append(saved_name)
+                            results.append(f"Downloaded: {saved_name}")
+                        elif "wikipedia.org/wiki/" in url.lower():
+                            references.append(url)
+                            results.append(f"Wikipedia reference link: {url}")
+                        else:
+                            references.append(url)
+                            results.append(f"Reference link: {url}")
+                    except Exception as exc:
+                        references.append(url)
+                        results.append(f"Kept as reference after download failure: {url} ({exc})")
+
+                config["reference_links"] = list(dict.fromkeys(references))
+                config["source_material"] = list(dict.fromkeys(config.get("source_material", []) + downloaded))
+                config["intro_material"] = list(dict.fromkeys(config.get("intro_material", []) + downloaded))
                 save_config(project, config)
-                st.success("Visual settings saved.")
+                st.session_state.link_results = results
                 st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
                 rerun_app()
+
+        for result in st.session_state.link_results:
+            st.write(result)
+
+        with st.expander("Current source_material folder", expanded=False):
+            files = sorted(p.name for p in source_dir(project).glob("*") if p.is_file())
+            st.code("\n".join(files) if files else "No files yet.", language="text")
 
     else:
+        tts_config = config.get("_project_config", {}).get("tts_config", {})
+        validator_config = config.get("_project_config", {}).get("validator_config", {})
+        image_config = config.get("_project_config", {}).get("image_config", {})
+        current_image_model = image_model_label_for_config(image_config.get("model", "seedream-v4"))
+        image_options, current_image_model = selectbox_options_with_current(
+            list(load_image_model_map().keys()),
+            current_image_model,
+            "seedream-v4",
+        )
+        current_deepseek_model = validator_config.get("model", DEFAULT_DEEPSEEK_MODEL)
+        deepseek_options = list(DEEPSEEK_MODEL_CHOICES)
+        if current_deepseek_model not in deepseek_options:
+            current_deepseek_model = DEFAULT_DEEPSEEK_MODEL
+        deepseek_model = st.selectbox(
+            "Language Model",
+            deepseek_options,
+            index=deepseek_options.index(current_deepseek_model),
+        )
+        image_model = st.selectbox(
+            "Image Generator Model",
+            image_options,
+            index=image_options.index(current_image_model),
+        )
+        tts_model_options = ["kokoro", "inworld-tts-1.5-max", "inworld-tts-2"]
+        current_tts_model = normalized_tts_model(tts_config.get("model", "kokoro"))
+        tts_model = st.selectbox(
+            "Text-to-Speech Model",
+            tts_model_options,
+            index=tts_model_options.index(current_tts_model),
+        )
+        voice_options = voice_options_for_tts_model(tts_model)
+        saved_voice = str(tts_config.get("voice_id", "")).strip()
+        current_voice = saved_voice if saved_voice in voice_options else voice_options[0]
+        voice_id = st.selectbox(
+            "Voice",
+            voice_options,
+            index=voice_options.index(current_voice),
+        )
+        previous, submitted = wizard_button_nav("Save & continue to Script Generation")
+        if previous:
+            st.session_state.config_step = max(0, st.session_state.config_step - 1)
+            rerun_app()
+        if submitted:
+            config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
+            config["_project_config"]["validator_config"] = {
+                "model": deepseek_model
+            }
+            config["_project_config"]["image_config"] = {"model": image_model.strip() or "seedream-v4"}
+            saved_path = save_config(project, config)
+            ready, _ = stage_readiness(project, "Config Wizard")
+            if ready:
+                set_stage_complete(project, "Config Wizard", True)
+                st.session_state.pending_workspace_page = "Script Generation"
+            st.session_state.config_saved_notice = f"Config saved: {saved_path}"
+            rerun_app()
+
         st.markdown("Saved configuration file")
         path = config_path(project)
         st.markdown(f"<div class='path-box'>{path}</div>", unsafe_allow_html=True)
@@ -1412,12 +1538,12 @@ def render_config_wizard(project: str) -> None:
         if warnings:
             st.warning(
                 "This saved config still looks incomplete. Go back to the relevant step, "
-                "edit it, and press that step's Save and continue button."
+                "edit it, and press that page's save button."
             )
             for warning in warnings:
                 st.write(f"- {warning}")
         else:
-            st.success("Saved config looks complete enough to run narration.")
+            st.success("Saved config looks complete enough to run the pipeline.")
 
         summary_cols = st.columns(4)
         with summary_cols[0]:
@@ -1430,25 +1556,45 @@ def render_config_wizard(project: str) -> None:
             st.metric("Characters", len(config.get("characters", {})))
 
         st.caption("This page shows a concise saved-config summary. The full config.json is available at the path above.")
-        if st.button("Save Config", width="stretch"):
-            saved_path = save_config(project, config)
-            ready, _ = stage_readiness(project, "Config Wizard")
-            if ready:
-                set_stage_complete(project, "Config Wizard", True)
-            st.session_state.config_saved_notice = f"Config saved: {saved_path}"
-            rerun_app()
-
-    step_controls(len(steps))
 
 
 def render_script_generation(project: str) -> None:
     st.subheader("Script Generation")
+    st.markdown("Generate the section outlines and full narration script. Validations happen silently.")
 
-    st.markdown("Generate and validate the outline and narration JSON files.")
-    for label, script, expected in SCRIPT_STAGES:
-        st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
-        if st.button(f"Run {label}", key=f"run_{script}_{label}", width="stretch"):
-            run_stage(project, label, script, expected)
+    outline_status = st.container()
+    if st.button("Generate Section Outlines", key="generate_section_outlines_flow", width="stretch"):
+        outline_path = artifact_location(project, "outline_texts.json")
+        with outline_status:
+            st.write("generating section outlines")
+            ok, detail = run_stage_quiet(project, "Generate Section Outlines", "generate_sections.py", "outline_texts.json")
+            if not ok:
+                st.error(detail)
+                return
+            st.write(f"section outlines generated and saved at {outline_path}.")
+            st.write("validating section outlines")
+            ok, detail = run_stage_quiet(project, "Validate Section Outlines", "validate_outline.py", "outline_texts.json")
+            if not ok:
+                st.error(detail)
+                return
+            st.write(f"final section outlines saved at {outline_path}.")
+
+    narration_status = st.container()
+    if st.button("Generate Full Script", key="generate_full_script_flow", width="stretch"):
+        narration_path = artifact_location(project, "narration.json")
+        with narration_status:
+            st.write("generating full script")
+            ok, detail = run_stage_quiet(project, "Generate Full Script", "generate_script.py", "narration.json")
+            if not ok:
+                st.error(detail)
+                return
+            st.write(f"full script generated and saved at {narration_path}.")
+            st.write("validating full script")
+            ok, detail = run_stage_quiet(project, "Validate Full Script", "validate_narration.py", "narration.json")
+            if not ok:
+                st.error(detail)
+                return
+            st.write(f"final full script saved at {narration_path}.")
 
 
 def render_voice_generation(project: str) -> None:
@@ -1645,6 +1791,16 @@ def render_image_generation(project: str) -> None:
         st.info("Run Generate Image Prompts first. The app will then show each prompt here.")
         return
 
+    image_generation_mode = st.selectbox(
+        "Image generation mode",
+        ["Review images one by one", "Generate all images one by one without review"],
+    )
+    if image_generation_mode == "Generate all images one by one without review":
+        if st.button("Generate all images without review", key="generate_all_images_no_review", width="stretch"):
+            if generate_all_images_without_review(project):
+                set_stage_complete(project, "Image Generation", True)
+        return
+
     st.session_state.active_review_index = max(0, min(st.session_state.active_review_index, len(items) - 1))
 
     nav_prev, nav_jump, nav_next = st.columns([1, 3, 1])
@@ -1801,9 +1957,16 @@ def generate_all_images_without_review(project: str) -> bool:
 def run_full_automatic_pipeline(project: str) -> None:
     st.warning("Automatic mode skips image review and saves generated images directly as approved images.")
 
+    if config_warnings(load_config(project)):
+        st.error("Config is incomplete. Save the required config fields before running automatic mode.")
+        return
+
+    set_stage_complete(project, "Config Wizard", True)
+
     for label, script, expected in SCRIPT_STAGES:
         if not run_stage(project, label, script, expected):
             return
+    set_stage_complete(project, "Script Generation", True)
 
     label, script, expected = IMAGE_PROMPT_STAGE
     if not run_stage(project, label, script, expected):
@@ -1811,6 +1974,7 @@ def run_full_automatic_pipeline(project: str) -> None:
 
     if not generate_all_images_without_review(project):
         return
+    set_stage_complete(project, "Image Generation", True)
 
     config = load_config(project)
     audio_keys = narration_segment_keys(project)
@@ -1823,10 +1987,26 @@ def run_full_automatic_pipeline(project: str) -> None:
         expected_audio_keys=audio_keys,
     ):
         return
+    set_stage_complete(project, "Voice Generation", True)
 
     image_keys = media_keys_in_dir(output_dir(project, "images"), "image", (".png",))
     audio_file_keys = media_keys_in_dir(output_dir(project, "audios"), "audio", (".mp3", ".wav"))
-    clip_keys = image_keys & audio_file_keys
+    missing_audio = sorted(image_keys - audio_file_keys)
+    missing_images = sorted(audio_file_keys - image_keys)
+    if missing_audio or missing_images:
+        if missing_audio:
+            st.error(
+                "Automatic mode stopped before clip generation. Missing audio for: "
+                + ", ".join(format_media_key(key) for key in missing_audio[:12])
+            )
+        if missing_images:
+            st.error(
+                "Automatic mode stopped before clip generation. Missing images for: "
+                + ", ".join(format_media_key(key) for key in missing_images[:12])
+            )
+        return
+
+    clip_keys = image_keys
     if not run_stage(
         project,
         "Generate Clips",
@@ -1837,7 +2017,9 @@ def run_full_automatic_pipeline(project: str) -> None:
     ):
         return
 
-    run_stage(project, "Compose Final Video", "make_video.py", "videos")
+    if not run_stage(project, "Compose Final Video", "make_video.py", "videos"):
+        return
+    set_stage_complete(project, "Video Generation", True)
 
 
 def render_page_footer(project: str, page: str) -> None:
@@ -1845,37 +2027,37 @@ def render_page_footer(project: str, page: str) -> None:
         return
 
     st.markdown("---")
+    if page == "Config Wizard":
+        auto_disabled = bool(config_warnings(load_config(project)))
+        if st.button(
+            "Generate Video in Fully Automated Mode",
+            key="run_full_auto_pipeline",
+            width="stretch",
+            disabled=auto_disabled,
+            type="primary",
+        ):
+            run_full_automatic_pipeline(project)
+        if auto_disabled:
+            st.caption("Complete and save the config before running the automatic pipeline.")
+        return
+
     left, right = st.columns([1, 1])
     ready_to_mark, readiness_message = stage_readiness(project, page)
     is_acknowledged = stage_acknowledged(project, page)
 
     with left:
-        mark_label = f"Mark {page} Complete"
-        if is_acknowledged:
-            st.success(f"{page} has been marked complete.")
+        mark_label = "MARK STAGE AS INCOMPLETE" if is_acknowledged else "MARK STAGE AS COMPLETE"
+        mark_disabled = not is_acknowledged and not ready_to_mark
         if st.button(
             mark_label,
             key=f"mark_complete_{page}",
             width="stretch",
-            disabled=not ready_to_mark,
+            disabled=mark_disabled,
         ):
-            set_stage_complete(project, page, True)
+            set_stage_complete(project, page, not is_acknowledged)
             rerun_app()
-        if not ready_to_mark:
+        if not ready_to_mark and not is_acknowledged:
             st.caption(readiness_message)
-
-    if page == "Config Wizard":
-        with left:
-            auto_disabled = bool(config_warnings(load_config(project)))
-            if st.button(
-                "Run Full Automatic Pipeline",
-                key="run_full_auto_pipeline",
-                width="stretch",
-                disabled=auto_disabled,
-            ):
-                run_full_automatic_pipeline(project)
-            if auto_disabled:
-                st.caption("Complete and save the config before running the automatic pipeline.")
 
     current_index = WORKFLOW_PAGES.index(page)
     if current_index < len(WORKFLOW_PAGES) - 1:
@@ -1890,8 +2072,6 @@ def render_page_footer(project: str, page: str) -> None:
             ):
                 st.session_state.pending_workspace_page = next_page
                 rerun_app()
-            if next_disabled:
-                st.caption("Mark this stage complete to continue with the guided next-step button.")
 
 
 def render_outputs(project: str) -> None:

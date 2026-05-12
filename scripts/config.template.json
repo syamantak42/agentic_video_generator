@@ -43,7 +43,7 @@
       "words_per_section": 400
     },
     "validator_config": {
-      "model": "deepseek-chat"
+      "model": "deepseek-v4-flash"
     },
     "tts_config": {
       "model": "kokoro",

@@ -21,7 +21,7 @@ Environment Variables:
 
 Configuration:
     - MIN_CHUNK_SIZE: 5000 characters per semantic chunk
-    - LLM model: 'deepseek-reasoner' (advanced reasoning)
+    - LLM model: configured DeepSeek model (default: deepseek-v4-flash)
 
 Usage:
     python generate_sections.py <project_name>
@@ -43,6 +43,7 @@ from openai import OpenAI
 import re
 from sentence_transformers import SentenceTransformer
 from console_utils import configure_utf8_output
+from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, create_deepseek_chat_completion, get_deepseek_model
 from prompt_loader import load_prompt, render_prompt
 from text_utils import clean_json_text, clean_text
 
@@ -84,7 +85,7 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
 load_dotenv(dotenv_path=ENV_PATH)
 my_tkn = os.getenv("DEEPSEEK_API_KEY")
-MODEL_NAME = "deepseek-reasoner" # LLM for narration generation: "deepseek-chat" "deepseek-reasoner
+MODEL_NAME = DEFAULT_DEEPSEEK_MODEL
 
 if not my_tkn:
     raise ValueError("Missing DEEPSEEK_API_KEY in .env file")
@@ -93,6 +94,7 @@ if not my_tkn:
 # Parse input project argument
 # --------------------------------------------------------
 project, source_dir, description = load_project_config()
+MODEL_NAME = get_deepseek_model(description)
 project_root = os.path.dirname(source_dir)
 json_dir = os.path.join(project_root, "outputs", "output_jsons")
 os.makedirs(json_dir, exist_ok=True)
@@ -275,7 +277,8 @@ def process_all_documents(source_dir, reference_links, intro_material=None):
 def extract_keywords(client, guidelines_text):
     """Extract a compact keyword set from section guidelines."""
     system_prompt = load_prompt("generate_sections_keywords_system.txt")
-    response = client.chat.completions.create(
+    response = create_deepseek_chat_completion(
+        client,
         model=MODEL_NAME,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -421,8 +424,9 @@ for idx, guideline in enumerate(section_guidelines, start=1):
     )
 
     print(f"[API] Calling DeepSeek for section {idx}")
-    response = client.chat.completions.create(
-        model="deepseek-reasoner",
+    response = create_deepseek_chat_completion(
+        client,
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": content},
             {"role": "user", "content": user_prompt}
