@@ -837,7 +837,7 @@ def stage_success_text(label: str, expected: str | None) -> str:
     if expected == "clips":
         return "Video clips generated."
     if expected == "videos":
-        return "Final video generated."
+        return "SUCCESS! Final video generated."
     return f"{label} completed."
 
 
@@ -1126,7 +1126,7 @@ def run_stage(
     expected_clip_keys: set[tuple[int, int]] | None = None,
     expected_audio_keys: set[tuple[int, int]] | None = None,
 ) -> bool:
-    with st.spinner(f"Running {label}..."):
+    with st.spinner(f"Running {label}... (DO NOT INTERRUPT)"):
         code, log = run_script(script_name, project, extra_args=extra_args)
     if code == 0:
         ok, message = verify_stage_artifact(
@@ -1162,7 +1162,7 @@ def run_stage_quiet(
     script_name: str,
     expected_output: str | None = None,
 ) -> tuple[bool, str]:
-    with st.spinner(f"Running {label}..."):
+    with st.spinner(f"Running {label}...(DO NOT INTERRUPT)"):
         code, log = run_script(script_name, project)
     if code != 0:
         recent_log = "\n".join(log.splitlines()[-40:])
