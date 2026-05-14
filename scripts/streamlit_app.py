@@ -666,12 +666,13 @@ def save_uploaded_sources(project: str, files) -> list[str]:
 
 def output_status(project: str) -> dict[str, bool]:
     base = output_dir(project, "output_jsons")
+    video_path = output_dir(project, "videos") / f"{project}.mp4"
     return {
         "outline_texts.json": (base / "outline_texts.json").exists(),
         "narration.json": (base / "narration.json").exists(),
         "image_prompts.json": (base / "image_prompts.json").exists(),
         "tts_index.json": (base / "tts_index.json").exists(),
-        "video": any(output_dir(project, "videos").glob("*.mp4")),
+        "video": video_path.exists() and video_path.stat().st_size > 0,
     }
 
 
@@ -822,8 +823,37 @@ def artifact_location(project: str, expected: str | None) -> Path | None:
     if expected == "clips":
         return output_dir(project, "clips")
     if expected == "videos":
-        return output_dir(project, "videos")
+        return final_video_path(project)
     return None
+
+
+def final_video_path(project: str) -> Path:
+    return output_dir(project, "videos") / f"{project}.mp4"
+
+
+def archive_existing_final_video(project: str) -> Path | None:
+    path = final_video_path(project)
+    if not path.exists():
+        return None
+
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    backup_path = path.with_name(f"{path.stem}_previous_{timestamp}{path.suffix}")
+    counter = 2
+    while backup_path.exists():
+        backup_path = path.with_name(f"{path.stem}_previous_{timestamp}_{counter}{path.suffix}")
+        counter += 1
+
+    path.replace(backup_path)
+    return backup_path
+
+
+def paths_match(left: str, right: Path) -> bool:
+    try:
+        return Path(left).resolve() == right.resolve()
+    except Exception:
+        normalized_left = str(left).replace("\\", "/").lower().rstrip("/")
+        normalized_right = str(right).replace("\\", "/").lower().rstrip("/")
+        return normalized_left == normalized_right
 
 
 def stage_success_text(label: str, expected: str | None) -> str:
@@ -838,7 +868,7 @@ def stage_success_text(label: str, expected: str | None) -> str:
     if expected == "clips":
         return "Video clips generated."
     if expected == "videos":
-        return "SUCCESS! Final video generated."
+        return "Final video generated."
     return f"{label} completed."
 
 
@@ -1033,6 +1063,8 @@ def verify_stage_artifact(
     expected: str | None,
     expected_clip_keys: set[tuple[int, int]] | None = None,
     expected_audio_keys: set[tuple[int, int]] | None = None,
+    min_mtime: float | None = None,
+    log_text: str | None = None,
 ) -> tuple[bool, str]:
     if not expected:
         return True, ""
@@ -1099,10 +1131,31 @@ def verify_stage_artifact(
         return True, f"Verified {len(keys_to_check)} selected clips in: {path}"
 
     if expected == "videos":
-        path = output_dir(project, "videos")
-        if not any(path.glob("*.mp4")):
-            return False, f"No final MP4 files found in: {path}"
-        return True, f"Verified video in: {path}"
+        video_path = final_video_path(project)
+        log_text = log_text or ""
+        success_match = re.search(r"COMPOSE_FINAL_VIDEO_OK:\s*(.+)", log_text)
+        if not success_match:
+            return False, "make_video.py did not report COMPOSE_FINAL_VIDEO_OK for this run."
+        success_path = success_match.group(1).strip()
+        if not paths_match(success_path, video_path):
+            return False, f"make_video.py reported a different final video path: {success_path}"
+
+        size_match = re.search(r"COMPOSE_FINAL_VIDEO_SIZE:\s*(\d+)", log_text)
+        if not size_match:
+            return False, "make_video.py did not report COMPOSE_FINAL_VIDEO_SIZE for this run."
+        reported_size = int(size_match.group(1))
+
+        if not video_path.exists():
+            return False, f"Expected final video was not created: {video_path}"
+        actual_size = video_path.stat().st_size
+        if actual_size <= 0:
+            return False, f"Expected final video is empty: {video_path}"
+        if actual_size != reported_size:
+            return False, f"Final video size mismatch: script reported {reported_size}, file is {actual_size}."
+        if min_mtime is not None and video_path.stat().st_mtime < min_mtime:
+            modified = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(video_path.stat().st_mtime))
+            return False, f"Final video was not updated by this run: {video_path} (last modified {modified})"
+        return True, f"Verified video: {video_path}"
 
     return True, ""
 
@@ -1127,6 +1180,7 @@ def run_stage(
     expected_clip_keys: set[tuple[int, int]] | None = None,
     expected_audio_keys: set[tuple[int, int]] | None = None,
 ) -> bool:
+    started_at = time.time()
     with st.spinner(f"Running {label}... (DO NOT INTERRUPT)"):
         code, log = run_script(script_name, project, extra_args=extra_args)
     if code == 0:
@@ -1135,6 +1189,8 @@ def run_stage(
             expected_output,
             expected_clip_keys=expected_clip_keys,
             expected_audio_keys=expected_audio_keys,
+            min_mtime=started_at,
+            log_text=log,
         )
         if ok:
             location = artifact_location(project, expected_output)
@@ -1155,6 +1211,46 @@ def run_stage(
         with st.expander("Recent log output", expanded=False):
             st.code(recent_log or "No log output captured.", language="text")
         return False
+
+
+def compose_final_video(project: str) -> bool:
+    video_path = final_video_path(project)
+    archived_path = archive_existing_final_video(project)
+    started_at = time.time()
+
+    with st.spinner("Running Compose Final Video... (DO NOT INTERRUPT)"):
+        code, log = run_script("make_video.py", project)
+
+    if code != 0:
+        st.error(f"Compose Final Video failed with exit code {code}.")
+        if archived_path:
+            st.info(f"Previous video was archived at: {archived_path}")
+        recent_log = "\n".join(log.splitlines()[-40:])
+        with st.expander("Recent log output", expanded=True):
+            st.code(recent_log or "No log output captured.", language="text")
+        return False
+
+    ok, message = verify_stage_artifact(
+        project,
+        "videos",
+        min_mtime=started_at,
+        log_text=log,
+    )
+    if not ok:
+        st.error("Compose Final Video finished but output validation failed.")
+        st.write(message)
+        if archived_path:
+            st.info(f"Previous video was archived at: {archived_path}")
+        recent_log = "\n".join(log.splitlines()[-40:])
+        with st.expander("Recent log output", expanded=True):
+            st.code(recent_log or "No log output captured.", language="text")
+        return False
+
+    st.success("Final video generated.")
+    st.markdown(f"<div class='path-box'>{video_path}</div>", unsafe_allow_html=True)
+    if archived_path:
+        st.caption(f"Previous video archived as: {archived_path.name}")
+    return True
 
 
 def run_stage_quiet(
@@ -1810,7 +1906,8 @@ def render_video_generation(project: str) -> None:
         )
 
     if st.button("Compose Final Video", key="run_make_video.py", width="stretch"):
-        run_stage(project, "Compose Final Video", "make_video.py", "videos")
+        if compose_final_video(project):
+            set_stage_complete(project, "Video Generation", True)
 
 
 def render_image_generation(project: str) -> None:
@@ -2056,13 +2153,15 @@ def run_full_automatic_pipeline(project: str) -> None:
     ):
         return
 
-    if not run_stage(project, "Compose Final Video", "make_video.py", "videos"):
+    if not compose_final_video(project):
         return
     set_stage_complete(project, "Video Generation", True)
 
 
 def render_page_footer(project: str, page: str) -> None:
     if page not in WORKFLOW_PAGES:
+        return
+    if page == "Video Generation":
         return
 
     st.markdown("---")
