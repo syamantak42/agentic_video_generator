@@ -21,6 +21,7 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 import streamlit as st
+from config_helper import generate_aesthetic_style, generate_guidelines, generate_narration_style
 from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_MODEL_CHOICES
 from dotenv import load_dotenv
 from PIL import Image
@@ -1368,63 +1369,106 @@ def render_config_wizard(project: str) -> None:
 
     if step == 0:
         narration_config = config.get("_project_config", {}).get("narration_config", {})
-        with st.form("content_form"):
-            title = st.text_input("Video title", value=config.get("video_title", ""))
-            n_section = st.number_input("Number of sections", min_value=1, max_value=30, value=int(config.get("n_section", 6)))
-            updated = st.text_area(
-                "Guidelines",
-                value="\n".join(config.get("section_outlines", [])),
-                height=220,
+        if st.session_state.get("content_state_project") != project:
+            st.session_state.content_state_project = project
+            st.session_state.content_video_title = config.get("video_title", "")
+            st.session_state.content_n_section = int(config.get("n_section", 6))
+            st.session_state.content_words_per_section = int(narration_config.get("words_per_section", 400))
+            st.session_state.content_frames_per_section = int(narration_config.get("frames_per_section", 2))
+            st.session_state.content_guidelines = "\n".join(config.get("section_outlines", []))
+            st.session_state.content_narration_style = "\n".join(config.get("narration_style", []))
+            st.session_state.content_aesthetic_style = config.get("aesthetic_style", "")
+            st.session_state.content_historical_context = config.get("historical_context", "")
+            st.session_state.content_characters = characters_to_text(config.get("characters", {}))
+            st.session_state.llm_help_guidelines = False
+            st.session_state.llm_help_narration_style = False
+            st.session_state.llm_help_aesthetic_style = False
+
+        title = st.text_input("Video topic", key="content_video_title")
+        section_cols = st.columns(3)
+        with section_cols[0]:
+            n_section = st.number_input(
+                "Number of sections",
+                min_value=1,
+                max_value=30,
+                key="content_n_section",
             )
-            narration_style = st.text_area(
-                "Narration Style",
-                value="\n".join(config.get("narration_style", [])),
-                height=150,
-            )
+        with section_cols[1]:
             words_per_section = st.number_input(
                 "Tentative words per section",
                 min_value=100,
                 max_value=3000,
                 step=50,
-                value=int(narration_config.get("words_per_section", 400)),
+                key="content_words_per_section",
             )
+        with section_cols[2]:
             frames_per_section = st.number_input(
                 "Tentative frames per section",
                 min_value=1,
                 max_value=12,
                 step=1,
-                value=int(narration_config.get("frames_per_section", 2)),
+                key="content_frames_per_section",
             )
-            aesthetic_style = st.text_area("Aesthetic style", value=config.get("aesthetic_style", ""), height=110)
-            with st.expander("Advanced", expanded=False):
-                historical_context = st.text_area("Historical context", value=config.get("historical_context", ""), height=100)
-                characters = st.text_area(
-                    "Character canon, one per line as Name: visual description",
-                    value=characters_to_text(config.get("characters", {})),
-                    height=170,
-                )
 
-            previous, submitted = wizard_form_nav("Save & continue to Sources", previous_disabled=True)
-            if previous:
-                st.session_state.config_step = max(0, st.session_state.config_step - 1)
-                rerun_app()
-            if submitted:
-                config["video_title"] = title.strip()
-                config["n_section"] = int(n_section)
-                config["section_outlines"] = split_lines(updated)
-                config["narration_style"] = split_lines(narration_style)
-                config["_project_config"]["narration_config"] = {
-                    "words_per_section": int(words_per_section),
-                    "frames_per_section": int(frames_per_section),
-                }
-                config["aesthetic_style"] = aesthetic_style.strip()
-                config["historical_context"] = historical_context.strip()
-                config["characters"] = parse_characters(characters)
-                config["_project_config"]["project_name"] = project
-                save_config(project, config)
-                st.success("Content saved.")
-                st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
-                rerun_app()
+        if st.toggle("Use LLM help for Guidelines", key="llm_help_guidelines"):
+            if st.button("Generate Guidelines", key="generate_guidelines_helper", width="stretch"):
+                if not title.strip():
+                    st.error("Enter a video topic before generating guidelines.")
+                else:
+                    with st.spinner("Generating guidelines..."):
+                        st.session_state.content_guidelines = generate_guidelines(title.strip(), int(n_section))
+                    st.success("Guidelines generated. Review and edit before saving.")
+        updated = st.text_area("Guidelines", key="content_guidelines", height=220)
+
+        if st.toggle("Use LLM help for Narration Style", key="llm_help_narration_style"):
+            if st.button("Generate Narration Style", key="generate_narration_style_helper", width="stretch"):
+                if not title.strip():
+                    st.error("Enter a video topic before generating narration style.")
+                else:
+                    with st.spinner("Generating narration style..."):
+                        st.session_state.content_narration_style = generate_narration_style(title.strip())
+                    st.success("Narration style generated. Review and edit before saving.")
+        narration_style = st.text_area("Narration Style", key="content_narration_style", height=150)
+
+        if st.toggle("Use LLM help for Aesthetic Style", key="llm_help_aesthetic_style"):
+            if st.button("Generate Aesthetic Style", key="generate_aesthetic_style_helper", width="stretch"):
+                if not title.strip():
+                    st.error("Enter a video topic before generating aesthetic style.")
+                else:
+                    with st.spinner("Generating aesthetic style..."):
+                        st.session_state.content_aesthetic_style = generate_aesthetic_style(title.strip())
+                    st.success("Aesthetic style generated. Review and edit before saving.")
+        aesthetic_style = st.text_area("Aesthetic style", key="content_aesthetic_style", height=110)
+
+        with st.expander("Advanced", expanded=False):
+            historical_context = st.text_area("Historical context", key="content_historical_context", height=100)
+            characters = st.text_area(
+                "Character canon, one per line as Name: visual description",
+                key="content_characters",
+                height=170,
+            )
+
+        previous, submitted = wizard_button_nav("Save & continue to Sources", previous_disabled=True)
+        if previous:
+            st.session_state.config_step = max(0, st.session_state.config_step - 1)
+            rerun_app()
+        if submitted:
+            config["video_title"] = title.strip()
+            config["n_section"] = int(n_section)
+            config["section_outlines"] = split_lines(updated)
+            config["narration_style"] = split_lines(narration_style)
+            config["_project_config"]["narration_config"] = {
+                "words_per_section": int(words_per_section),
+                "frames_per_section": int(frames_per_section),
+            }
+            config["aesthetic_style"] = aesthetic_style.strip()
+            config["historical_context"] = historical_context.strip()
+            config["characters"] = parse_characters(characters)
+            config["_project_config"]["project_name"] = project
+            save_config(project, config)
+            st.success("Content saved.")
+            st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
+            rerun_app()
 
     elif step == 1:
         with st.form("sources_form"):
@@ -1533,7 +1577,7 @@ def render_config_wizard(project: str) -> None:
             st.session_state.config_saved_notice = f"Config saved: {saved_path}"
             rerun_app()
 
-        st.markdown("Saved configuration file")
+        st.markdown("Configuration file saved at the location below - please review and edit if needed")
         path = config_path(project)
         st.markdown(f"<div class='path-box'>{path}</div>", unsafe_allow_html=True)
         if st.session_state.config_saved_notice:
@@ -1552,7 +1596,7 @@ def render_config_wizard(project: str) -> None:
             for warning in warnings:
                 st.write(f"- {warning}")
         else:
-            st.success("Saved config looks complete enough to run the pipeline.")
+            st.success("Saved config has enough information to run the pipeline.")
 
         summary_cols = st.columns(4)
         with summary_cols[0]:
