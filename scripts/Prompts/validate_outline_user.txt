@@ -7,11 +7,4 @@ ${outline_json}
 USER_SECTION_GUIDELINES:
 ${section_guidelines_json}
 
-NARRATION_STYLE_REQUIREMENTS:
-${narration_style_json}
 
-HISTORICAL_OR_SUBJECT_CONTEXT:
-${historical_context}
-
-CHARACTER_CANON:
-${characters_json}

@@ -1569,7 +1569,7 @@ def render_config_wizard(project: str) -> None:
 
 def render_script_generation(project: str) -> None:
     st.subheader("Script Generation")
-    st.markdown("Generate the section outlines and full narration script. Validations happen silently.")
+    st.markdown("Generate the section outlines and full narration script.")
 
     outline_status = st.container()
     if st.button("Generate Section Outlines", key="generate_section_outlines_flow", width="stretch"):
@@ -1609,7 +1609,7 @@ def render_script_generation(project: str) -> None:
 def render_voice_generation(project: str) -> None:
     st.subheader("Voice Generation")
 
-    st.markdown("Generate narration audio selectively, using the frame keys from narration.json.")
+    st.markdown("Generate narration audio selectively")
 
     config = load_config(project)
     available_keys = narration_segment_keys(project)
@@ -1623,7 +1623,7 @@ def render_voice_generation(project: str) -> None:
         st.info("Generate and validate narration first. The audio frames come from narration.json.")
         return
 
-    st.markdown("<div class='stage-row'><strong>Generate Audio</strong></div>", unsafe_allow_html=True)
+   
     audio_mode = st.radio(
         "Audio selection",
         ["Missing audio", "All audio", "Range", "Specific frames"],
@@ -1676,7 +1676,7 @@ def render_voice_generation(project: str) -> None:
 
     script = tts_script_for_config(config)
     can_generate_audio = not selection_error and bool(selected_audio_keys)
-    if st.button("Run Generate Audio", key="run_generate_audio_selected", width="stretch", disabled=not can_generate_audio):
+    if st.button("Generate Audio", key="run_generate_audio_selected", width="stretch", disabled=not can_generate_audio):
         run_stage(
             project,
             "Generate Audio",
@@ -1785,19 +1785,21 @@ def render_video_generation(project: str) -> None:
 
 def render_image_generation(project: str) -> None:
     st.subheader("Image Generation")
+    
     config = load_config(project)
 
     label, script, expected = IMAGE_PROMPT_STAGE
     st.markdown(f"<div class='stage-row'><strong>{label}</strong></div>", unsafe_allow_html=True)
-    if st.button(f"Run {label}", key=f"run_{script}_{label}", width="stretch"):
+    if st.button(label, key=f"run_{script}_{label}", width="stretch"):
         run_stage(project, label, script, expected)
 
-    st.markdown("<div class='stage-row'><strong>Review and Generate Images</strong></div>", unsafe_allow_html=True)
+    
     items = load_image_prompt_items(project)
     if not items:
-        st.info("Run Generate Image Prompts first. The app will then show each prompt here.")
+        st.info("Generate Image Prompts first. The app will then show each prompt here.")
         return
 
+    st.markdown(f"<div class='stage-row'><strong>Generate Images</strong></div>", unsafe_allow_html=True)
     image_generation_mode = st.selectbox(
         "Image generation mode",
         ["Review images one by one", "Generate all images one by one without review"],

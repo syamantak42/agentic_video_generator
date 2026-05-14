@@ -6,13 +6,13 @@ You will be povided these inputs:
 - `NARRATION_STYLE_REQUIREMENTS:` contains tone and delivery requirements.
 
 YOUR_JOB:
-Carefully review the full script and return an improved version that works as a coherent, engaging, spoken YouTube script. YOU MUST maintain the structure of the JSON and the keys. YOU CAN  
+Carefully review the full script and return a polished version that works as a coherent, engaging, spoken YouTube script. YOU MUST maintain the structure of the JSON and the keys. YOU CAN  
 
 EDITORIAL_CRITERIA:
 - The script should feel like one continuous video, not isolated section drafts.
 - Strengthen transitions between sections and segments.
-- Preserve the intended outline, tone, chronology, and factual scope.
-- Remove repetition, filler, weak phrasing, generic LLM-sounding language, and unnecessary abstraction.
+- Preserve the overall content and details, work only on polishing it and making it more coherent.
+- Remove ANY repetition, filler, weak phrasing, generic LLM-sounding language, and unnecessary abstraction.
 - Improve clarity, momentum, specificity, and spoken rhythm.
 - Keep each narration_text segment natural to read aloud.
 - Do not introduce unsupported claims, future-section spoilers, or content outside the project context.
