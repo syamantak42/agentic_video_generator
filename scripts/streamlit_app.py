@@ -1595,20 +1595,6 @@ def render_config_wizard(project: str) -> None:
             )
             for warning in warnings:
                 st.write(f"- {warning}")
-        else:
-            st.success("Saved config has enough information to run the pipeline.")
-
-        summary_cols = st.columns(4)
-        with summary_cols[0]:
-            st.metric("Sections", len(config.get("section_outlines", [])))
-        with summary_cols[1]:
-            st.metric("Reference links", len(config.get("reference_links", [])))
-        with summary_cols[2]:
-            st.metric("Source files", len(config.get("source_material", [])))
-        with summary_cols[3]:
-            st.metric("Characters", len(config.get("characters", {})))
-
-        st.caption("This page shows a concise saved-config summary. The full config.json is available at the path above.")
 
 
 def render_script_generation(project: str) -> None:
