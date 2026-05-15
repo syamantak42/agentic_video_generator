@@ -40,6 +40,14 @@ OUTPUT_FOLDERS = [
     "videos",
 ]
 
+OUTPUT_PAGE_FOLDERS = [
+    ("outline, script and image prompts", "output_jsons"),
+    ("images", "images"),
+    ("audios", "audios"),
+    ("clips", "clips"),
+    ("videos", "videos"),
+]
+
 SCRIPT_STAGES = [
     ("Generate Outline", "generate_sections.py", "outline_texts.json"),
     ("Revise Outline", "validate_outline.py", "outline_texts.json"),
@@ -56,6 +64,14 @@ WORKFLOW_PAGES = [
     "Voice Generation",
     "Video Generation",
 ]
+
+WORKFLOW_PILL_LABELS = {
+    "Config Wizard": "Generate Config",
+    "Script Generation": "Generate Scripts",
+    "Image Generation": "Generate Images",
+    "Voice Generation": "Generate Voices",
+    "Video Generation": "Compile Video",
+}
 
 def inject_css() -> None:
     st.markdown(
@@ -83,7 +99,7 @@ def inject_css() -> None:
         }
 
         .block-container {
-            padding-top: 2rem;
+            padding-top: 1rem;
             padding-bottom: 4rem;
             max-width: 1180px;
             font-size: 1.247rem;
@@ -106,24 +122,47 @@ def inject_css() -> None:
         .app-hero {
             border: 1px solid var(--line);
             border-radius: 8px;
-            padding: 22px 24px;
+            padding: 14px 16px;
             background:
-                linear-gradient(135deg, rgba(32, 227, 178, .24) 0%, rgba(76, 201, 240, .18) 52%, rgba(255, 209, 102, .12) 100%);
-            margin-bottom: 18px;
-            box-shadow: 0 16px 42px rgba(0, 0, 0, .25);
+                linear-gradient(135deg, rgba(32, 227, 178, .18) 0%, rgba(76, 201, 240, .12) 58%, rgba(255, 209, 102, .08) 100%);
+            margin-bottom: 12px;
+            box-shadow: 0 10px 26px rgba(0, 0, 0, .22);
         }
 
         .app-hero h1 {
             margin: 0;
-            font-size: 2.617rem;
-            line-height: 1.15;
+            font-size: 1.82rem;
+            line-height: 1.05;
         }
 
-        .app-hero p {
-            color: var(--muted);
-            margin: 8px 0 0 0;
-            max-width: 760px;
-            font-size: 1.287rem;
+        .workflow-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 10px;
+            align-items: center;
+        }
+
+        .workflow-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 1.55rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #315173;
+            background: rgba(15, 31, 53, .94);
+            color: #cde3f7;
+            font-size: .92rem;
+            font-weight: 900;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .workflow-pill.active {
+            background: #39ff14;
+            border-color: rgba(198, 255, 190, .9);
+            color: #04120a;
+            box-shadow: 0 0 18px rgba(57, 255, 20, .42);
         }
 
         .metric-card {
@@ -1383,12 +1422,17 @@ def set_active_review_index(index: int, item_count: int) -> None:
     st.session_state.active_prompt_text = ""
 
 
-def render_header() -> None:
+def render_header(active_page: str = "") -> None:
+    pills = []
+    for page_name, label in WORKFLOW_PILL_LABELS.items():
+        active_class = " active" if page_name == active_page else ""
+        pills.append(f'<span class="workflow-pill{active_class}">{html.escape(label)}</span>')
+
     st.markdown(
-        """
+        f"""
         <div class="app-hero">
             <h1>Agentic Video Generator</h1>
-            <p>Build the project config, generate scripts, create images and voice, then compose the final video from one guided workspace.</p>
+            <div class="workflow-pills">{"".join(pills)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1505,6 +1549,17 @@ def render_config_wizard(project: str) -> None:
                 step=1,
                 key="content_frames_per_section",
             )
+
+        if st.button("Save Config", key="save_content_basics", width="stretch"):
+            config["video_title"] = title.strip()
+            config["n_section"] = int(n_section)
+            config["_project_config"]["narration_config"] = {
+                "words_per_section": int(words_per_section),
+                "frames_per_section": int(frames_per_section),
+            }
+            config["_project_config"]["project_name"] = project
+            save_config(project, config)
+            st.success("Config saved.")
 
         if st.toggle("Use LLM help for Guidelines", key="llm_help_guidelines"):
             if st.button("Generate Guidelines", key="generate_guidelines_helper", width="stretch"):
@@ -2214,25 +2269,20 @@ def render_page_footer(project: str, page: str) -> None:
 
 def render_outputs(project: str) -> None:
     st.subheader("Outputs")
-    for folder in OUTPUT_FOLDERS:
+    for label, folder in OUTPUT_PAGE_FOLDERS:
         path = output_dir(project, folder)
-        st.markdown(f"**{folder}**")
+        st.markdown(f"**{label}**")
         st.markdown(f"<div class='path-box'>{path}</div>", unsafe_allow_html=True)
-        files = sorted([p.name for p in path.glob("*") if p.is_file()])[:40]
-        if files:
-            st.code("\n".join(files), language="text")
-        else:
-            st.caption("No files yet.")
 
 
 def main() -> None:
     st.set_page_config(page_title="Agentic Video Generator", layout="wide")
     inject_css()
     init_state()
-    render_header()
 
     project = render_project_selector()
     if not project:
+        render_header()
         st.info("Create or select a project to begin.")
         return
 
@@ -2257,8 +2307,8 @@ def main() -> None:
 
     page = render_sidebar_navigation(project, pages)
 
+    render_header(page)
     st.markdown(f"Project: **{project}**")
-    st.markdown(f"<div class='path-box'>{project_root(project)}</div>", unsafe_allow_html=True)
 
     if page == "Config Wizard":
         render_config_wizard(project)

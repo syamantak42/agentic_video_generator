@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, create_deepseek_chat_completion
+from deepseek_utils import DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_COMPLETION_KWARGS
 from dotenv import load_dotenv
 from openai import OpenAI
 from text_utils import clean_text
@@ -23,6 +23,10 @@ SYSTEM_PROMPT = (
     "Do not include markdown, code fences, headings, or explanations."
 )
 
+GUIDELINES_MAX_TOKENS = 900
+NARRATION_STYLE_MAX_TOKENS = 450
+AESTHETIC_STYLE_MAX_TOKENS = 300
+
 
 def get_client() -> OpenAI:
     load_dotenv(dotenv_path=ENV_PATH)
@@ -33,8 +37,7 @@ def get_client() -> OpenAI:
 
 
 def ask_deepseek(user_prompt: str, max_tokens: int = 600) -> str:
-    response = create_deepseek_chat_completion(
-        get_client(),
+    response = get_client().chat.completions.create(
         model=DEFAULT_DEEPSEEK_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -42,6 +45,7 @@ def ask_deepseek(user_prompt: str, max_tokens: int = 600) -> str:
         ],
         temperature=0.4,
         max_tokens=max_tokens,
+        **DEEPSEEK_COMPLETION_KWARGS,
     )
     return clean_text(response.choices[0].message.content or "")
 
@@ -50,8 +54,9 @@ def generate_guidelines(video_title: str, n_section: int) -> str:
     prompt = (
         f"Generate a brief but concise and compact outline for a YouTube video on {video_title} "
         f"with {n_section} sections.\n"
-        )
-    return ask_deepseek(prompt, max_tokens=max(500, min(1800, int(n_section) * 90)))
+        f"Return exactly {n_section} short lines, one line per section."
+    )
+    return ask_deepseek(prompt, max_tokens=GUIDELINES_MAX_TOKENS)
 
 
 def generate_narration_style(video_title: str) -> str:
@@ -59,16 +64,16 @@ def generate_narration_style(video_title: str) -> str:
         f"Suggest an appropriate narration style for a YouTube video on {video_title}.\n"
         "Return 3 to 5 short lines."
     )
-    return ask_deepseek(prompt, max_tokens=450)
+    return ask_deepseek(prompt, max_tokens=NARRATION_STYLE_MAX_TOKENS)
 
 
 def generate_aesthetic_style(video_title: str) -> str:
     prompt = (
         f"Suggest an aesthetic style for a video on {video_title}.\n"
-        "Return one concise visual style sentence." \
+        "Return one concise visual style sentence. "
         "The Aesthetic style MUST be coherent, and easy to render by standard image generation models."
     )
-    return ask_deepseek(prompt, max_tokens=250)
+    return ask_deepseek(prompt, max_tokens=AESTHETIC_STYLE_MAX_TOKENS)
 
 
 def generate_all(video_title: str, n_section: int) -> dict:
