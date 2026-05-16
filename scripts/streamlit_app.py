@@ -1075,6 +1075,30 @@ def stage_completion_status(project: str) -> dict[str, bool]:
     return {stage: stage_acknowledged(project, stage) for stage in WORKFLOW_PAGES}
 
 
+def query_param_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            value = params.get(name, [""])
+        except Exception:
+            value = ""
+
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return unquote(str(value))
+
+
+def selected_project_from_query(projects: list[str]) -> str:
+    project = query_param_value("project")
+    return project if project in projects else ""
+
+
+def selected_stage_from_query() -> str:
+    return query_param_value("stage")
+
+
 def render_sidebar_navigation(project: str, pages: list[str]) -> str:
     completion = stage_completion_status(project)
     st.sidebar.markdown("### Stage Status")
@@ -1091,7 +1115,7 @@ def render_sidebar_navigation(project: str, pages: list[str]) -> str:
             pill_class = "stage-pill-todo"
 
         active_class = " active" if st.session_state.workspace_page == page_name else ""
-        href = f"?stage={quote(page_name)}"
+        href = f"?project={quote(project)}&stage={quote(page_name)}"
         st.sidebar.markdown(
             f"""
             <a class="stage-nav-row{active_class}" href="{href}" target="_self">
@@ -1103,21 +1127,6 @@ def render_sidebar_navigation(project: str, pages: list[str]) -> str:
         )
 
     return st.session_state.workspace_page
-
-
-def selected_stage_from_query() -> str:
-    try:
-        value = st.query_params.get("stage", "")
-    except Exception:
-        try:
-            params = st.experimental_get_query_params()
-            value = params.get("stage", [""])
-        except Exception:
-            value = ""
-
-    if isinstance(value, list):
-        value = value[0] if value else ""
-    return unquote(str(value))
 
 
 def verify_stage_artifact(
@@ -1465,6 +1474,9 @@ def render_header(active_page: str = "") -> None:
 def render_project_selector() -> str:
     st.sidebar.header("Project")
     projects = list_projects()
+    query_project = selected_project_from_query(projects)
+    if query_project:
+        st.session_state.selected_project = query_project
 
     mode = st.sidebar.radio("Mode", ["Open existing", "Create new"], horizontal=False)
     if mode == "Create new":
@@ -1476,6 +1488,10 @@ def render_project_selector() -> str:
                 if not config_path(project).exists():
                     save_config(project, default_config(project))
                 st.session_state.selected_project = project
+                try:
+                    st.query_params["project"] = project
+                except Exception:
+                    pass
                 rerun_app()
         except ValueError as exc:
             st.sidebar.error(str(exc))
@@ -1491,6 +1507,11 @@ def render_project_selector() -> str:
             project = st.sidebar.selectbox("Existing project", projects, index=default_index)
             if project:
                 st.session_state.selected_project = project
+                try:
+                    if query_param_value("project") != project:
+                        st.query_params["project"] = project
+                except Exception:
+                    pass
 
     if not st.session_state.selected_project and project:
         st.session_state.selected_project = project
@@ -2383,6 +2404,7 @@ def main() -> None:
     if pending_page in pages:
         st.session_state.workspace_page = pending_page
         try:
+            st.query_params["project"] = project
             st.query_params["stage"] = pending_page
         except Exception:
             pass
