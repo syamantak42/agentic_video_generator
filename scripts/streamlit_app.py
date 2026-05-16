@@ -252,6 +252,29 @@ def inject_css() -> None:
             box-shadow: none;
         }
 
+        details[data-testid="stExpander"] > summary {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 8px;
+            color: #ffffff !important;
+            font-size: 1.227rem;
+            font-weight: 850;
+            min-height: 2.8rem;
+            padding: .55rem .85rem;
+        }
+
+        details[data-testid="stExpander"] > summary p,
+        details[data-testid="stExpander"] > summary span {
+            color: #ffffff !important;
+            font-weight: 850;
+        }
+
+        details[data-testid="stExpander"] {
+            border-color: rgba(255, 255, 255, .12) !important;
+            background: rgba(16, 28, 47, .65);
+            border-radius: 8px;
+        }
+
         section[data-testid="stSidebar"] {
             background: #091426;
             border-right: 1px solid var(--line);
@@ -1492,6 +1515,92 @@ def wizard_button_nav(next_label: str, previous_disabled: bool = False) -> tuple
     return previous, submitted
 
 
+def load_content_state_from_config(project: str, config: dict | None = None) -> None:
+    config = config or load_config(project)
+    narration_config = config.get("_project_config", {}).get("narration_config", {})
+
+    st.session_state.content_state_project = project
+    st.session_state.content_video_title = config.get("video_title", "")
+    st.session_state.content_n_section = int(config.get("n_section", 6))
+    st.session_state.content_words_per_section = int(narration_config.get("words_per_section", 400))
+    st.session_state.content_frames_per_section = int(narration_config.get("frames_per_section", 2))
+    st.session_state.content_guidelines = "\n".join(config.get("section_outlines", []))
+    st.session_state.content_narration_style = "\n".join(config.get("narration_style", []))
+    st.session_state.content_aesthetic_style = config.get("aesthetic_style", "")
+    st.session_state.content_historical_context = config.get("historical_context", "")
+    st.session_state.content_characters = characters_to_text(config.get("characters", {}))
+    st.session_state.llm_help_guidelines = False
+    st.session_state.llm_help_narration_style = False
+    st.session_state.llm_help_aesthetic_style = False
+
+
+def apply_content_basics(
+    project: str,
+    config: dict,
+    title: str,
+    n_section: int,
+    words_per_section: int,
+    frames_per_section: int,
+) -> None:
+    config["video_title"] = title.strip()
+    config["n_section"] = int(n_section)
+    config["_project_config"]["narration_config"] = {
+        "words_per_section": int(words_per_section),
+        "frames_per_section": int(frames_per_section),
+    }
+    config["_project_config"]["project_name"] = project
+
+
+def save_content_basics(
+    project: str,
+    config: dict,
+    title: str,
+    n_section: int,
+    words_per_section: int,
+    frames_per_section: int,
+) -> Path:
+    apply_content_basics(project, config, title, n_section, words_per_section, frames_per_section)
+    return save_config(project, config)
+
+
+def save_content_page(
+    project: str,
+    config: dict,
+    title: str,
+    n_section: int,
+    words_per_section: int,
+    frames_per_section: int,
+    guidelines: str,
+    narration_style: str,
+    aesthetic_style: str,
+    historical_context: str,
+    characters: str,
+) -> Path:
+    apply_content_basics(project, config, title, n_section, words_per_section, frames_per_section)
+    config["section_outlines"] = split_lines(guidelines)
+    config["narration_style"] = split_lines(narration_style)
+    config["aesthetic_style"] = aesthetic_style.strip()
+    config["historical_context"] = historical_context.strip()
+    config["characters"] = parse_characters(characters)
+    return save_config(project, config)
+
+
+def save_models_page(
+    project: str,
+    config: dict,
+    tts_model: str,
+    voice_id: str,
+    deepseek_model: str,
+    image_model: str,
+) -> Path:
+    project_config = config.setdefault("_project_config", {})
+    project_config["project_name"] = project
+    project_config["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
+    project_config["validator_config"] = {"model": deepseek_model}
+    project_config["image_config"] = {"model": image_model.strip() or "seedream-v4"}
+    return save_config(project, config)
+
+
 def render_config_wizard(project: str) -> None:
     config = load_config(project)
     steps = ["Content", "Sources", "Models"]
@@ -1508,21 +1617,8 @@ def render_config_wizard(project: str) -> None:
     step = st.session_state.config_step
 
     if step == 0:
-        narration_config = config.get("_project_config", {}).get("narration_config", {})
         if st.session_state.get("content_state_project") != project:
-            st.session_state.content_state_project = project
-            st.session_state.content_video_title = config.get("video_title", "")
-            st.session_state.content_n_section = int(config.get("n_section", 6))
-            st.session_state.content_words_per_section = int(narration_config.get("words_per_section", 400))
-            st.session_state.content_frames_per_section = int(narration_config.get("frames_per_section", 2))
-            st.session_state.content_guidelines = "\n".join(config.get("section_outlines", []))
-            st.session_state.content_narration_style = "\n".join(config.get("narration_style", []))
-            st.session_state.content_aesthetic_style = config.get("aesthetic_style", "")
-            st.session_state.content_historical_context = config.get("historical_context", "")
-            st.session_state.content_characters = characters_to_text(config.get("characters", {}))
-            st.session_state.llm_help_guidelines = False
-            st.session_state.llm_help_narration_style = False
-            st.session_state.llm_help_aesthetic_style = False
+            load_content_state_from_config(project, config)
 
         title = st.text_input("Video topic", key="content_video_title")
         section_cols = st.columns(3)
@@ -1551,14 +1647,7 @@ def render_config_wizard(project: str) -> None:
             )
 
         if st.button("Save Config", key="save_content_basics", width="stretch"):
-            config["video_title"] = title.strip()
-            config["n_section"] = int(n_section)
-            config["_project_config"]["narration_config"] = {
-                "words_per_section": int(words_per_section),
-                "frames_per_section": int(frames_per_section),
-            }
-            config["_project_config"]["project_name"] = project
-            save_config(project, config)
+            save_content_basics(project, config, title, int(n_section), int(words_per_section), int(frames_per_section))
             st.success("Config saved.")
 
         if st.toggle("Use LLM help for Guidelines", key="llm_help_guidelines"):
@@ -1591,7 +1680,7 @@ def render_config_wizard(project: str) -> None:
                     st.success("Aesthetic style generated. Review and edit before saving.")
         aesthetic_style = st.text_area("Aesthetic style", key="content_aesthetic_style", height=110)
 
-        with st.expander("Advanced", expanded=False):
+        with st.expander("Advanced Options (Not mandatory)", expanded=False):
             historical_context = st.text_area("Historical context", key="content_historical_context", height=100)
             characters = st.text_area(
                 "Character canon, one per line as Name: visual description",
@@ -1604,19 +1693,19 @@ def render_config_wizard(project: str) -> None:
             st.session_state.config_step = max(0, st.session_state.config_step - 1)
             rerun_app()
         if submitted:
-            config["video_title"] = title.strip()
-            config["n_section"] = int(n_section)
-            config["section_outlines"] = split_lines(updated)
-            config["narration_style"] = split_lines(narration_style)
-            config["_project_config"]["narration_config"] = {
-                "words_per_section": int(words_per_section),
-                "frames_per_section": int(frames_per_section),
-            }
-            config["aesthetic_style"] = aesthetic_style.strip()
-            config["historical_context"] = historical_context.strip()
-            config["characters"] = parse_characters(characters)
-            config["_project_config"]["project_name"] = project
-            save_config(project, config)
+            save_content_page(
+                project,
+                config,
+                title,
+                int(n_section),
+                int(words_per_section),
+                int(frames_per_section),
+                updated,
+                narration_style,
+                aesthetic_style,
+                historical_context,
+                characters,
+            )
             st.success("Content saved.")
             st.session_state.config_step = min(len(steps) - 1, st.session_state.config_step + 1)
             rerun_app()
@@ -1628,6 +1717,7 @@ def render_config_wizard(project: str) -> None:
 
             previous, submitted = wizard_form_nav("Save & continue to Models")
             if previous:
+                load_content_state_from_config(project)
                 st.session_state.config_step = max(0, st.session_state.config_step - 1)
                 rerun_app()
 
@@ -1715,12 +1805,7 @@ def render_config_wizard(project: str) -> None:
             st.session_state.config_step = max(0, st.session_state.config_step - 1)
             rerun_app()
         if submitted:
-            config["_project_config"]["tts_config"] = {"model": tts_model, "voice_id": voice_id.strip()}
-            config["_project_config"]["validator_config"] = {
-                "model": deepseek_model
-            }
-            config["_project_config"]["image_config"] = {"model": image_model.strip() or "seedream-v4"}
-            saved_path = save_config(project, config)
+            saved_path = save_models_page(project, config, tts_model, voice_id, deepseek_model, image_model)
             ready, _ = stage_readiness(project, "Config Wizard")
             if ready:
                 set_stage_complete(project, "Config Wizard", True)
