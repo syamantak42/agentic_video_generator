@@ -1404,6 +1404,31 @@ def load_image_prompt_items(project: str) -> list[dict]:
     return items
 
 
+def save_image_prompt_text(project: str, section_index: int, prompt_index: int, prompt_text: str) -> Path:
+    path = output_dir(project, "output_jsons") / "image_prompts.json"
+    if not path.exists():
+        raise FileNotFoundError(f"image_prompts.json not found: {path}")
+
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    sections = data.get("sections", [])
+    if section_index < 1 or section_index > len(sections):
+        raise IndexError(f"Section {section_index} not found in image_prompts.json")
+
+    section = sections[section_index - 1]
+    prompts = section.get("image_prompts", [])
+    if prompt_index < 1 or prompt_index > len(prompts):
+        raise IndexError(f"Image prompt {section_index}.{prompt_index} not found in image_prompts.json")
+
+    prompts[prompt_index - 1] = prompt_text
+
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return path
+
+
 def image_model_for_config(config: dict) -> str:
     model_value = (
         config.get("_project_config", {})
@@ -2202,6 +2227,13 @@ def render_image_generation(project: str) -> None:
     st.text_area("Narration segment", value=item["narration"], height=120, disabled=True)
     prompt_text = st.text_area("Image prompt", value=st.session_state.active_prompt_text, height=180)
     st.session_state.active_prompt_text = prompt_text
+    if prompt_text != item["prompt"]:
+        try:
+            save_image_prompt_text(project, section_index, prompt_index, prompt_text)
+            item["prompt"] = prompt_text
+            st.caption("Image prompt saved to image_prompts.json.")
+        except Exception as exc:
+            st.error(f"Could not save edited image prompt: {exc}")
 
     cols = st.columns([1, 1, 1])
     with cols[0]:
