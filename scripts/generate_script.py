@@ -427,7 +427,7 @@ def chat_with_llm(system_prompt, queries, outline_data, my_tkn):
     responses = []
 
     for i, query in enumerate(queries):
-        print(f"Generating narration section {i + 1}/{len(queries)}", flush=True)
+        print(f"Generating script {i + 1}/{len(queries)}", flush=True)
         outline_with_status = make_outline_with_status(outline_data, i)
         contextual_query = f"""
 {query}

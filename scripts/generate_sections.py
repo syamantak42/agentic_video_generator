@@ -408,7 +408,7 @@ previous_summary = ""
 content = load_prompt("generate_sections_outline_system.txt")
 
 for idx, guideline in enumerate(section_guidelines, start=1):
-    print(f"\n[SECTION {idx}/{len(section_guidelines)}] Processing")
+    print(f"Generating outline {idx}/{len(section_guidelines)}", flush=True)
     print(f"[GUIDELINE] {guideline}")
     retrieved = hybrid_retrieve(guideline, chunks, retrieval_model, chunk_embeddings, keywords, top_k=8)
     print(f"[RETRIEVAL] Selected {len(retrieved)} chunks")

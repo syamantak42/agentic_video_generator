@@ -49,10 +49,10 @@ OUTPUT_PAGE_FOLDERS = [
 ]
 
 SCRIPT_STAGES = [
-    ("Generate Outline", "generate_sections.py", "outline_texts.json"),
-    ("Revise Outline", "validate_outline.py", "outline_texts.json"),
-    ("Generate Narration", "generate_script.py", "narration.json"),
-    ("Revise Narration", "validate_narration.py", "narration.json"),
+    ("Generate Section Outlines", "generate_sections.py", "outline_texts.json"),
+    ("Refine Section Outlines", "validate_outline.py", "outline_texts.json"),
+    ("Generate Full Script", "generate_script.py", "narration.json"),
+    ("Refine Full Script", "validate_narration.py", "narration.json"),
 ]
 
 IMAGE_PROMPT_STAGE = ("Generate Image Prompts", "generate_image_prompts.py", "image_prompts.json")
@@ -252,7 +252,12 @@ def inject_css() -> None:
             box-shadow: none;
         }
 
-        details[data-testid="stExpander"] > summary {
+        div[data-testid="stExpander"] summary,
+        div[data-testid="stExpander"] [role="button"],
+        div[data-testid="stExpanderDetails"] summary,
+        div[data-testid="stExpanderDetails"] [role="button"],
+        details[data-testid="stExpander"] > summary,
+        details summary {
             background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
             border: 1px solid rgba(255, 255, 255, .12);
             border-radius: 8px;
@@ -263,12 +268,24 @@ def inject_css() -> None:
             padding: .55rem .85rem;
         }
 
+        div[data-testid="stExpander"] summary p,
+        div[data-testid="stExpander"] summary span,
+        div[data-testid="stExpander"] [role="button"] p,
+        div[data-testid="stExpander"] [role="button"] span,
+        div[data-testid="stExpanderDetails"] summary p,
+        div[data-testid="stExpanderDetails"] summary span,
+        div[data-testid="stExpanderDetails"] [role="button"] p,
+        div[data-testid="stExpanderDetails"] [role="button"] span,
         details[data-testid="stExpander"] > summary p,
-        details[data-testid="stExpander"] > summary span {
+        details[data-testid="stExpander"] > summary span,
+        details summary p,
+        details summary span {
             color: #ffffff !important;
             font-weight: 850;
         }
 
+        div[data-testid="stExpander"],
+        div[data-testid="stExpanderDetails"],
         details[data-testid="stExpander"] {
             border-color: rgba(255, 255, 255, .12) !important;
             background: rgba(16, 28, 47, .65);
@@ -750,7 +767,7 @@ def config_warnings(config: dict) -> list[str]:
     if not config.get("narration_style", []):
         warnings.append("No narration style is saved.")
     if not config.get("aesthetic_style", "").strip():
-        warnings.append("Aesthetic style is empty.")
+        warnings.append("Artistic style is empty.")
     if not config.get("_project_config", {}).get("project_name"):
         warnings.append("Project name is missing from _project_config.")
     return warnings
@@ -772,9 +789,27 @@ def format_duration(seconds: float) -> str:
 def progress_event_from_line(line: str) -> tuple[str, str, int, int, bool] | None:
     patterns = [
         (
+            r"Generating outline\s+(\d+)\s*/\s*(\d+)",
+            "outline_sections",
+            "Generating Outline of Section {current} of {total}",
+            False,
+        ),
+        (
+            r"\[SECTION\s+(\d+)\s*/\s*(\d+)\]\s+Processing",
+            "outline_sections",
+            "Generating Outline of Section {current} of {total}",
+            False,
+        ),
+        (
+            r"Generating script\s+(\d+)\s*/\s*(\d+)",
+            "narration",
+            "Generating Script for Section {current} of {total}",
+            False,
+        ),
+        (
             r"Generating narration section\s+(\d+)\s*/\s*(\d+)",
             "narration",
-            "Generating narration section {current} of {total}",
+            "Generating Script for Section {current} of {total}",
             False,
         ),
         (
@@ -920,9 +955,9 @@ def paths_match(left: str, right: Path) -> bool:
 
 def stage_success_text(label: str, expected: str | None) -> str:
     if expected == "outline_texts.json":
-        return "Outline generated." if "Generate" in label else "Outline revised."
+        return "Outline generated." if "Generate" in label else "Outline refined."
     if expected == "narration.json":
-        return "Narration generated." if "Generate" in label else "Narration revised."
+        return "Narration generated." if "Generate" in label else "Narration refined."
     if expected == "image_prompts.json":
         return "Image prompts generated."
     if expected == "tts_index.json":
@@ -1270,7 +1305,7 @@ def run_stage(
                 st.markdown(f"<div class='path-box'>{location}</div>", unsafe_allow_html=True)
             return True
         else:
-            st.error(f"{label} finished but output validation failed.")
+            st.error(f"{label} finished but output check failed.")
             st.write(message)
             recent_log = "\n".join(log.splitlines()[-40:])
             with st.expander("Recent log output", expanded=False):
@@ -1308,7 +1343,7 @@ def compose_final_video(project: str) -> bool:
         log_text=log,
     )
     if not ok:
-        st.error("Compose Final Video finished but output validation failed.")
+        st.error("Compose Final Video finished but output check failed.")
         st.write(message)
         if archived_path:
             st.info(f"Previous video was archived at: {archived_path}")
@@ -1340,7 +1375,7 @@ def run_stage_quiet(
     if not ok:
         recent_log = "\n".join(log.splitlines()[-40:])
         detail = "\n".join(part for part in [message, recent_log] if part)
-        return False, detail or f"{label} finished but output validation failed."
+        return False, detail or f"{label} finished but output check failed."
     return True, ""
 
 
@@ -1691,15 +1726,22 @@ def render_config_wizard(project: str) -> None:
                     st.success("Narration style generated. Review and edit before saving.")
         narration_style = st.text_area("Narration Style", key="content_narration_style", height=150)
 
-        if st.toggle("Use LLM help for Aesthetic Style", key="llm_help_aesthetic_style"):
-            if st.button("Generate Aesthetic Style", key="generate_aesthetic_style_helper", width="stretch"):
+        if st.toggle("Use LLM help for Artistic Style", key="llm_help_aesthetic_style"):
+            if st.button("Generate Artistic Style", key="generate_aesthetic_style_helper", width="stretch"):
                 if not title.strip():
-                    st.error("Enter a video topic before generating aesthetic style.")
+                    st.error("Enter a video topic before generating artistic style.")
                 else:
-                    with st.spinner("Generating aesthetic style..."):
-                        st.session_state.content_aesthetic_style = generate_aesthetic_style(title.strip())
-                    st.success("Aesthetic style generated. Review and edit before saving.")
-        aesthetic_style = st.text_area("Aesthetic style", key="content_aesthetic_style", height=110)
+                    try:
+                        with st.spinner("Generating artistic style..."):
+                            suggested_style = generate_aesthetic_style(title.strip())
+                        if suggested_style.strip():
+                            st.session_state.content_aesthetic_style = suggested_style
+                            st.success("Artistic style generated. Review and edit before saving.")
+                        else:
+                            st.error("The model returned a blank artistic style. Your existing text was kept.")
+                    except Exception as exc:
+                        st.error(f"Artistic style generation failed: {exc}")
+        aesthetic_style = st.text_area("Artistic style", key="content_aesthetic_style", height=110)
 
         with st.expander("Advanced Options (Not mandatory)", expanded=False):
             historical_context = st.text_area("Historical context", key="content_historical_context", height=100)
@@ -1858,39 +1900,42 @@ def render_script_generation(project: str) -> None:
     st.subheader("Script Generation")
     st.markdown("Generate the section outlines and full narration script.")
 
-    outline_status = st.container()
-    if st.button("Generate Section Outlines", key="generate_section_outlines_flow", width="stretch"):
-        outline_path = artifact_location(project, "outline_texts.json")
-        with outline_status:
-            st.write("generating section outlines")
-            ok, detail = run_stage_quiet(project, "Generate Section Outlines", "generate_sections.py", "outline_texts.json")
-            if not ok:
-                st.error(detail)
-                return
-            st.write(f"section outlines generated and saved at {outline_path}.")
-            st.write("revising section outlines")
-            ok, detail = run_stage_quiet(project, "Revise Section Outlines", "validate_outline.py", "outline_texts.json")
-            if not ok:
-                st.error(detail)
-                return
-            st.write(f"final section outlines saved at {outline_path}.")
+    outline_path = artifact_location(project, "outline_texts.json")
+    narration_path = artifact_location(project, "narration.json")
+    outline_exists = bool(outline_path and outline_path.exists())
+    narration_exists = bool(narration_path and narration_path.exists())
 
-    narration_status = st.container()
-    if st.button("Generate Full Script", key="generate_full_script_flow", width="stretch"):
-        narration_path = artifact_location(project, "narration.json")
-        with narration_status:
-            st.write("generating full script")
-            ok, detail = run_stage_quiet(project, "Generate Full Script", "generate_script.py", "narration.json")
-            if not ok:
-                st.error(detail)
-                return
-            st.write(f"full script generated and saved at {narration_path}.")
-            st.write("revising full script")
-            ok, detail = run_stage_quiet(project, "Revise Full Script", "validate_narration.py", "narration.json")
-            if not ok:
-                st.error(detail)
-                return
-            st.write(f"final full script saved at {narration_path}.")
+    st.markdown("**Section Outlines**")
+    outline_generate_col, outline_refine_col = st.columns(2)
+    with outline_generate_col:
+        generate_outlines = st.button("Generate Section Outlines", key="generate_section_outlines_flow", width="stretch")
+    with outline_refine_col:
+        refine_outlines = st.button(
+            "Refine Section Outlines",
+            key="refine_section_outlines_flow",
+            width="stretch",
+            disabled=not outline_exists,
+        )
+    if generate_outlines:
+        run_stage(project, "Generate Section Outlines", "generate_sections.py", "outline_texts.json")
+    if refine_outlines:
+        run_stage(project, "Refine Section Outlines", "validate_outline.py", "outline_texts.json")
+
+    st.markdown("**Full Script**")
+    script_generate_col, script_refine_col = st.columns(2)
+    with script_generate_col:
+        generate_script = st.button("Generate Full Script", key="generate_full_script_flow", width="stretch")
+    with script_refine_col:
+        refine_script = st.button(
+            "Refine Full Script",
+            key="refine_full_script_flow",
+            width="stretch",
+            disabled=not narration_exists,
+        )
+    if generate_script:
+        run_stage(project, "Generate Full Script", "generate_script.py", "narration.json")
+    if refine_script:
+        run_stage(project, "Refine Full Script", "validate_narration.py", "narration.json")
 
 
 def render_voice_generation(project: str) -> None:
@@ -1907,7 +1952,7 @@ def render_voice_generation(project: str) -> None:
     key_by_label = dict(zip(key_labels, key_options))
 
     if not available_keys:
-        st.info("Generate and validate narration first. The audio frames come from narration.json.")
+        st.info("Generate and refine narration first. The audio frames come from narration.json.")
         return
 
    

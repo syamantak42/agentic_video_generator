@@ -36,18 +36,28 @@ def get_client() -> OpenAI:
     return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
 
-def ask_deepseek(user_prompt: str, max_tokens: int = 600) -> str:
-    response = get_client().chat.completions.create(
-        model=DEFAULT_DEEPSEEK_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.4,
-        max_tokens=max_tokens,
-        **DEEPSEEK_COMPLETION_KWARGS,
-    )
-    return clean_text(response.choices[0].message.content or "")
+def ask_deepseek(user_prompt: str, max_tokens: int = 600, attempts: int = 2) -> str:
+    client = get_client()
+    last_finish_reason = None
+
+    for _ in range(attempts):
+        response = client.chat.completions.create(
+            model=DEFAULT_DEEPSEEK_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.4,
+            max_tokens=max_tokens,
+            **DEEPSEEK_COMPLETION_KWARGS,
+        )
+        choice = response.choices[0]
+        last_finish_reason = getattr(choice, "finish_reason", None)
+        content = clean_text(choice.message.content or "")
+        if content:
+            return content
+
+    raise ValueError(f"DeepSeek returned an empty response. Finish reason: {last_finish_reason}")
 
 
 def generate_guidelines(video_title: str, n_section: int) -> str:
@@ -69,9 +79,16 @@ def generate_narration_style(video_title: str) -> str:
 
 def generate_aesthetic_style(video_title: str) -> str:
     prompt = (
-        f"Suggest an aesthetic style for a video on {video_title}.\n"
-        "Return one concise visual style sentence. "
-        "The Aesthetic style MUST be coherent, and easy to render by standard image generation models."
+        f"Suggest an artistic style for a video on {video_title}.\n"
+        "Return ONLY ONE concise artistic style sentence. "
+        "NEVER mix two or more distinct styles. "
+        "The artistic style MUST be coherent and easy to render by standard image generation models. "
+        "The style MUST be well-defined and well-known. "
+        "The style MUST be extremely precise and concise, no more than 10 to 15 words maximum. "
+        "The style MUST NOT be obscure. "
+        "The style MUST NOT be too verbose. "
+        "You may mention extremely famous artists only if they are known to be easily rendered by image generator models. "
+        "you MUST ensure the style is coherent, robust and well known enough so a standard ai imagenerator can perfectly render it."
     )
     return ask_deepseek(prompt, max_tokens=AESTHETIC_STYLE_MAX_TOKENS)
 
