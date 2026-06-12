@@ -1390,8 +1390,14 @@ def load_image_prompt_items(project: str) -> list[dict]:
     for section_index, section in enumerate(data.get("sections", []), start=1):
         prompts = section.get("image_prompts", [])
         narrations = section.get("narration_text", [])
+        if len(prompts) != len(narrations):
+            title = section.get("section_title", f"Section {section_index}")
+            raise ValueError(
+                f"image_prompts.json mismatch in section {section_index} ({title}): "
+                f"{len(prompts)} image prompts but {len(narrations)} narration segments."
+            )
         for prompt_index, prompt in enumerate(prompts, start=1):
-            narration = narrations[prompt_index - 1] if prompt_index - 1 < len(narrations) else ""
+            narration = narrations[prompt_index - 1]
             items.append(
                 {
                     "section_index": section_index,
@@ -1402,6 +1408,11 @@ def load_image_prompt_items(project: str) -> list[dict]:
                 }
             )
     return items
+
+
+def image_prompt_source_key(project: str, section_index: int, prompt_index: int, prompt_text: str) -> str:
+    digest = hashlib.sha1(prompt_text.encode("utf-8")).hexdigest()
+    return f"{project}:{section_index}:{prompt_index}:{digest}"
 
 
 def save_image_prompt_text(project: str, section_index: int, prompt_index: int, prompt_text: str) -> Path:
@@ -1496,6 +1507,7 @@ def init_state() -> None:
     st.session_state.setdefault("active_review_index", 0)
     st.session_state.setdefault("active_review_path", "")
     st.session_state.setdefault("active_prompt_text", "")
+    st.session_state.setdefault("active_prompt_source_key", "")
     st.session_state.setdefault("image_review_notice", "")
     st.session_state.setdefault("image_review_notice_kind", "success")
     st.session_state.setdefault("link_results", [])
@@ -1509,9 +1521,47 @@ def rerun_app() -> None:
 
 
 def set_active_review_index(index: int, item_count: int) -> None:
-    st.session_state.active_review_index = max(0, min(item_count - 1, index))
+    bounded_index = max(0, min(item_count - 1, index))
+    st.session_state.active_review_index = bounded_index
     st.session_state.active_review_path = ""
     st.session_state.active_prompt_text = ""
+    st.session_state.active_prompt_source_key = ""
+
+
+def keep_review_image(project: str, section_index: int, prompt_index: int, item_count: int) -> None:
+    if not st.session_state.active_review_path:
+        st.session_state.image_review_notice = "No review image is available to keep."
+        st.session_state.image_review_notice_kind = "error"
+        return
+
+    try:
+        approved_path = output_dir(project, "images") / f"image_{section_index}_{prompt_index}.png"
+        copy_checked(Path(st.session_state.active_review_path), approved_path)
+        st.session_state.image_review_notice = f"Approved image saved: {approved_path}"
+        st.session_state.image_review_notice_kind = "success"
+        set_active_review_index(st.session_state.active_review_index + 1, item_count)
+    except Exception as exc:
+        st.session_state.image_review_notice = f"Could not keep image: {exc}"
+        st.session_state.image_review_notice_kind = "error"
+
+
+def reject_review_image(project: str, section_index: int, prompt_index: int) -> None:
+    if not st.session_state.active_review_path:
+        st.session_state.image_review_notice = "No review image is available to reject."
+        st.session_state.image_review_notice_kind = "error"
+        return
+
+    try:
+        rejected_dir = output_dir(project, "rejected_images")
+        existing = sorted(rejected_dir.glob(f"image_{section_index}_{prompt_index}_v*.png"))
+        reject_path = rejected_dir / f"image_{section_index}_{prompt_index}_v{len(existing) + 1}.png"
+        copy_checked(Path(st.session_state.active_review_path), reject_path)
+        st.session_state.image_review_notice = f"Rejected image saved: {reject_path}"
+        st.session_state.image_review_notice_kind = "warning"
+        st.session_state.active_review_path = ""
+    except Exception as exc:
+        st.session_state.image_review_notice = f"Could not reject image: {exc}"
+        st.session_state.image_review_notice_kind = "error"
 
 
 def render_header(active_page: str = "") -> None:
@@ -2152,7 +2202,11 @@ def render_image_generation(project: str) -> None:
         run_stage(project, label, script, expected)
 
     
-    items = load_image_prompt_items(project)
+    try:
+        items = load_image_prompt_items(project)
+    except Exception as exc:
+        st.error(str(exc))
+        return
     if not items:
         st.info("Generate Image Prompts first. The app will then show each prompt here.")
         return
@@ -2180,6 +2234,7 @@ def render_image_generation(project: str) -> None:
             "Jump to prompt",
             options=list(range(len(items))),
             index=st.session_state.active_review_index,
+            key=f"active_review_select_{project}_{len(items)}_{st.session_state.active_review_index}",
             format_func=lambda index: (
                 f"{index + 1}. Section {items[index]['section_index']}."
                 f"{items[index]['prompt_index']} - {items[index]['section_title']}"
@@ -2199,7 +2254,6 @@ def render_image_generation(project: str) -> None:
 
     approved_path = output_dir(project, "images") / f"image_{section_index}_{prompt_index}.png"
     review_dir = output_dir(project, "images") / "_review"
-    rejected_dir = output_dir(project, "rejected_images")
     active_review_path = Path(st.session_state.active_review_path) if st.session_state.active_review_path else None
     has_review_image = bool(active_review_path and active_review_path.exists())
 
@@ -2210,8 +2264,10 @@ def render_image_generation(project: str) -> None:
     with right:
         st.progress((st.session_state.active_review_index + 1) / len(items))
 
-    if st.session_state.active_prompt_text == "":
+    current_prompt_key = image_prompt_source_key(project, section_index, prompt_index, item["prompt"])
+    if st.session_state.active_prompt_source_key != current_prompt_key:
         st.session_state.active_prompt_text = item["prompt"]
+        st.session_state.active_prompt_source_key = current_prompt_key
 
     if st.session_state.image_review_notice:
         notice_kind = st.session_state.image_review_notice_kind
@@ -2225,27 +2281,42 @@ def render_image_generation(project: str) -> None:
         st.session_state.image_review_notice_kind = "success"
 
     st.text_area("Narration segment", value=item["narration"], height=120, disabled=True)
-    prompt_text = st.text_area("Image prompt", value=st.session_state.active_prompt_text, height=180)
-    st.session_state.active_prompt_text = prompt_text
-    if prompt_text != item["prompt"]:
-        try:
-            save_image_prompt_text(project, section_index, prompt_index, prompt_text)
-            item["prompt"] = prompt_text
-            st.caption("Image prompt saved to image_prompts.json.")
-        except Exception as exc:
-            st.error(f"Could not save edited image prompt: {exc}")
+    with st.form(key=f"image_prompt_form_{project}_{section_index}_{prompt_index}"):
+        prompt_text = st.text_area("Image prompt", key="active_prompt_text", height=180)
+        generate = st.form_submit_button("Generate new image", width="stretch")
 
-    cols = st.columns([1, 1, 1])
+    cols = st.columns([1, 1])
     with cols[0]:
-        generate = st.button("Generate new image", width="stretch")
+        st.button(
+            "Keep image",
+            key="keep_review_image",
+            disabled=not has_review_image,
+            width="stretch",
+            on_click=keep_review_image,
+            args=(project, section_index, prompt_index, len(items)),
+        )
     with cols[1]:
-        keep = st.button("Keep image", disabled=not has_review_image, width="stretch")
-    with cols[2]:
-        reject = st.button("Reject image", disabled=not has_review_image, width="stretch")
+        st.button(
+            "Reject image",
+            key="reject_review_image",
+            disabled=not has_review_image,
+            width="stretch",
+            on_click=reject_review_image,
+            args=(project, section_index, prompt_index),
+        )
 
     if generate:
         try:
             with st.spinner("Generating image..."):
+                if prompt_text != item["prompt"]:
+                    save_image_prompt_text(project, section_index, prompt_index, prompt_text)
+                    item["prompt"] = prompt_text
+                    st.session_state.active_prompt_source_key = image_prompt_source_key(
+                        project,
+                        section_index,
+                        prompt_index,
+                        prompt_text,
+                    )
                 image = generate_image_with_fal(prompt_text, config)
                 attempt = int(time.time())
                 review_path = review_dir / f"image_{section_index}_{prompt_index}_attempt{attempt}.png"
@@ -2261,30 +2332,6 @@ def render_image_generation(project: str) -> None:
         st.image(str(active_review_path), caption="Current review image", width="stretch")
     elif approved_path.exists():
         st.image(str(approved_path), caption="Approved image already exists", width="stretch")
-
-    if keep and st.session_state.active_review_path:
-        try:
-            copy_checked(Path(st.session_state.active_review_path), approved_path)
-            st.session_state.image_review_notice = f"Approved image saved: {approved_path}"
-            st.session_state.image_review_notice_kind = "success"
-            st.session_state.active_review_path = ""
-            st.session_state.active_prompt_text = ""
-            st.session_state.active_review_index = min(len(items) - 1, st.session_state.active_review_index + 1)
-            rerun_app()
-        except Exception as exc:
-            st.error(str(exc))
-
-    if reject and st.session_state.active_review_path:
-        try:
-            existing = sorted(rejected_dir.glob(f"image_{section_index}_{prompt_index}_v*.png"))
-            reject_path = rejected_dir / f"image_{section_index}_{prompt_index}_v{len(existing) + 1}.png"
-            copy_checked(Path(st.session_state.active_review_path), reject_path)
-            st.session_state.image_review_notice = f"Rejected image saved: {reject_path}"
-            st.session_state.image_review_notice_kind = "warning"
-            st.session_state.active_review_path = ""
-            rerun_app()
-        except Exception as exc:
-            st.error(str(exc))
 
     nav_left, nav_right = st.columns([1, 1])
     with nav_left:
