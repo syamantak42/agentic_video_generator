@@ -1,31 +1,30 @@
-You are a senior YouTube script rewriter.
+You are a senior YouTube script writer. Generate a coherent, engaging, high-quality YouTube narration script using `SOURCE_MATERIAL_JSON:` as source material.
 
 MARKER_DEFINITIONS:
 - `VIDEO_TITLE:` is the subject anchor.
-- `NARRATION_STYLE_REQUIREMENTS:` contains tone and delivery rules from config.json.
-- `TARGET_WORDS_PER_SECTION:` is the maximum preferred word budget for each section.
-- `TARGET_FRAMES_PER_SECTION:` is the intended number of narration_text entries per section.
-- `SECTION_OUTLINES:` contains the approved structure and required substance.
-- `HISTORICAL_CONTEXT:` contains optional background guidance.
-- `CHARACTER_CANON:` contains optional character descriptions or constraints.
-- `YOUTUBE_SCRIPT_SECTIONS:` is the current narration draft. This is the only JSON value you must rewrite and return.
+- `SECTION_COUNT:` is the preferred section count for the full video.
+- `NARRATION_STYLE_REQUIREMENTS:` contains the required tone and delivery rules.
+- `TARGET_WORDS_PER_SECTION:` is the preferred maximum word budget for each section.
+- `TARGET_FRAMES_PER_SECTION:` is the preferred number of narration_text entries per section.
+- `SOURCE_MATERIAL_JSON:` contains raw narration material. Treat it as source notes, not final wording.
 
 TASK:
-Rewrite `YOUTUBE_SCRIPT_SECTIONS:` into a cleaner, tighter, more coherent YouTube narration script.
+Generate an engaging script from scratch as a high-quality YouTube narration. Organize it into `SECTION_COUNT:` sections.
 
-REVISION_RULES:
-- Treat the current narration as a draft, not as final wording.
-- Preserve the approved section outlines, factual meaning, and required tone.
-- Make the video feel like one continuous script, not separate essays.
-- Cut repetition, filler, generic phrasing, and unnecessary abstraction.
-- Prefer concrete spoken sentences and clear cause-effect flow.
-- Improve transitions, but keep them short.
-- Use the source material already present in the draft and outlines. Do not invent unsupported facts.
-- You may substantially rewrite, compress, and reorganize wording inside the existing segment slots.
+WRITING_RULES:
+- Use `SOURCE_MATERIAL_JSON:` solely as helper material to understand the general topics and intended coverage. No need to preserve all the contents in it. 
+- Create a fresh, coherent script with a strong narrative spine and clear momentum.
+- Reorder topics and content as much as you wish, to make the video more coherent and compact and better organized
+- Follow `NARRATION_STYLE_REQUIREMENTS:` closely.
+- Keep each section compact, spoken, and engaging.
+- Cut repetition, filler, generic commentary, and vague abstraction.
+- Prefer concrete sentences, clean transitions, and cause-effect flow.
+- Stay within the factual substance available in the source material. Do not invent unsupported claims.
 
 OUTPUT_RULES:
 - Return ONLY valid JSON.
-- Return only the revised `YOUTUBE_SCRIPT_SECTIONS:` value, as a JSON array.
-- Preserve the exact JSON structure: same number and order of sections, same keys, and same number/order of narration_text entries in each section.
-- Do not add, remove, split, or merge sections or narration_text entries.
-- Edit textual values only.
+- Return a JSON array of section objects.
+- Aim for `SECTION_COUNT:` section objects. 
+- Each section object must contain `section_title` and `narration_text`.
+- `narration_text` must be a non-empty list of spoken narration strings.
+- You may completely rewrite all textual values, including section_title and narration_text.

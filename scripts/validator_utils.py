@@ -230,7 +230,17 @@ def validate_json_with_deepseek(json_path, system_prompt, user_prompt, config, l
     }
 
 
-def validate_json_field_with_deepseek(json_path, field_name, system_prompt, user_prompt, config, label):
+def validate_json_field_with_deepseek(
+    json_path,
+    field_name,
+    system_prompt,
+    user_prompt,
+    config,
+    label,
+    temperature=0.2,
+    preserve_structure=True,
+    field_validator=None,
+):
     """Validate and rewrite one JSON field, preserving the rest of the file exactly."""
     json_path = Path(json_path)
     original = read_json(json_path)
@@ -246,7 +256,7 @@ def validate_json_field_with_deepseek(json_path, field_name, system_prompt, user
     response = create_deepseek_chat_completion(
         client,
         model=model,
-        temperature=0.2,
+        temperature=temperature,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -255,8 +265,13 @@ def validate_json_field_with_deepseek(json_path, field_name, system_prompt, user
 
     content = response.choices[0].message.content.strip()
     candidate = parse_llm_json(content)
-    assert_same_structure(original_field, candidate, path=f"$.{field_name}")
-    normalized_field = normalize_to_original_order(original_field, candidate)
+    if preserve_structure:
+        assert_same_structure(original_field, candidate, path=f"$.{field_name}")
+        normalized_field = normalize_to_original_order(original_field, candidate)
+    else:
+        if field_validator:
+            field_validator(candidate)
+        normalized_field = candidate
 
     updated = dict(original)
     updated[field_name] = normalized_field

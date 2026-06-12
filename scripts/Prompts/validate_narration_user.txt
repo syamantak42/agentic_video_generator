@@ -1,6 +1,9 @@
 VIDEO_TITLE:
 ${video_title}
 
+SECTION_COUNT:
+${n_section}
+
 NARRATION_STYLE_REQUIREMENTS:
 ${narration_style_json}
 
@@ -10,14 +13,5 @@ ${words_per_section}
 TARGET_FRAMES_PER_SECTION:
 ${frames_per_section}
 
-SECTION_OUTLINES:
-${outline_json}
-
-HISTORICAL_CONTEXT:
-${historical_context}
-
-CHARACTER_CANON:
-${characters_json}
-
-YOUTUBE_SCRIPT_SECTIONS:
+SOURCE_MATERIAL_JSON:
 ${sections_json}
