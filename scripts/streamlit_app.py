@@ -750,6 +750,7 @@ def output_status(project: str) -> dict[str, bool]:
         "outline_texts.json": (base / "outline_texts.json").exists(),
         "narration.json": (base / "narration.json").exists(),
         "image_prompts.json": (base / "image_prompts.json").exists(),
+        "youtube_metadata.json": (base / "youtube_metadata.json").exists(),
         "tts_index.json": (base / "tts_index.json").exists(),
         "video": video_path.exists() and video_path.stat().st_size > 0,
     }
@@ -915,7 +916,7 @@ def run_script(script_name: str, project: str, extra_args: list[str] | None = No
 def artifact_location(project: str, expected: str | None) -> Path | None:
     if not expected:
         return None
-    if expected in {"outline_texts.json", "narration.json"}:
+    if expected in {"outline_texts.json", "narration.json", "youtube_metadata.json"}:
         return output_dir(project, "output_jsons") / expected
     if expected == "clips":
         return output_dir(project, "clips")
@@ -960,6 +961,8 @@ def stage_success_text(label: str, expected: str | None) -> str:
         return "Narration generated." if "Generate" in label else "Narration refined."
     if expected == "image_prompts.json":
         return "Image prompts generated."
+    if expected == "youtube_metadata.json":
+        return "YouTube metadata generated."
     if expected == "tts_index.json":
         return "Audio clips generated."
     if expected == "clips":
@@ -1216,6 +1219,17 @@ def verify_stage_artifact(
                 if missing:
                     missing_text = ", ".join(format_media_key(key) for key in missing)
                     return False, f"Missing audio files for frame keys: {missing_text}"
+
+        if expected == "youtube_metadata.json":
+            if not isinstance(data, dict):
+                return False, f"youtube_metadata.json is not an object: {path}"
+            if not str(data.get("title", "")).strip():
+                return False, f"youtube_metadata.json is missing title: {path}"
+            if not str(data.get("description", "")).strip():
+                return False, f"youtube_metadata.json is missing description: {path}"
+            tags = data.get("tags")
+            if not isinstance(tags, list) or not any(str(tag).strip() for tag in tags):
+                return False, f"youtube_metadata.json contains no tags: {path}"
 
         return True, f"Verified output: {path}"
 
@@ -2189,6 +2203,32 @@ def render_video_generation(project: str) -> None:
     if st.button("Compose Final Video", key="run_make_video.py", width="stretch"):
         if compose_final_video(project):
             set_stage_complete(project, "Video Generation", True)
+
+    final_video = final_video_path(project)
+    narration_path = output_dir(project, "output_jsons") / "narration.json"
+    can_generate_youtube_metadata = (
+        final_video.exists()
+        and final_video.stat().st_size > 0
+        and narration_path.exists()
+        and narration_path.stat().st_size > 2
+    )
+    if st.button(
+        "Generate YouTube Descriptions",
+        key="run_generate_youtube_metadata",
+        width="stretch",
+        disabled=not can_generate_youtube_metadata,
+    ):
+        run_stage(
+            project,
+            "Generate YouTube Descriptions",
+            "generate_youtube_metadata.py",
+            "youtube_metadata.json",
+        )
+
+    if not final_video.exists() or final_video.stat().st_size <= 0:
+        st.caption("Compose the final video first.")
+    elif not narration_path.exists() or narration_path.stat().st_size <= 2:
+        st.caption("Generate the full script first.")
 
 
 def render_image_generation(project: str) -> None:

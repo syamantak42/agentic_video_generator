@@ -1,5 +1,7 @@
 {
   "seedream-v4": "fal-ai/bytedance/seedream/v4/text-to-image",
   "seedream-v4.5": "fal-ai/bytedance/seedream/v4.5/text-to-image",
-  "flux-2-pro": "fal-ai/flux-2-pro/text-to-image"
+  "flux-2-pro": "fal-ai/flux-2-pro/text-to-image",
+  "nvidia-cosmos-3-super": "fal-ai/nvidia/cosmos-3-super/text-to-image",
+  "krea-v2-medium": "fal-ai/krea/v2/medium/text-to-image"
 }

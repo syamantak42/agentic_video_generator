@@ -1,0 +1,4 @@
+VIDEO_TITLE: ${video_title}
+
+NARRATION_TEXT:
+${narration_text}
