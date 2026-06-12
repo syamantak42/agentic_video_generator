@@ -1,12 +1,23 @@
 VIDEO_TITLE:
 ${video_title}
 
-YOUTUBE_SCRIPT_JSON:
-${sections_json}
-
 NARRATION_STYLE_REQUIREMENTS:
 ${narration_style_json}
 
+TARGET_WORDS_PER_SECTION:
+${words_per_section}
 
+TARGET_FRAMES_PER_SECTION:
+${frames_per_section}
 
+SECTION_OUTLINES:
+${outline_json}
 
+HISTORICAL_CONTEXT:
+${historical_context}
+
+CHARACTER_CANON:
+${characters_json}
+
+YOUTUBE_SCRIPT_SECTIONS:
+${sections_json}

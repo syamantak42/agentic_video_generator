@@ -25,9 +25,9 @@ Environment Variables:
 
 Configuration:
     - MIN_CHUNK_SIZE: 1000 characters per semantic chunk
-    - FAISS model: 'BAAI/bge-large-en-v1.5' (semantic embeddings)
+    - FAISS model: 'BAAI/bge-small-en-v1.5' (semantic embeddings)
     - LLM model: configured DeepSeek model (default: deepseek-v4-flash)
-    - Temperature: 1.2 (creative generation)
+    - Temperature: 0.7 (balanced coherence and style)
 
 Usage:
     python generate_script.py <project_name>
@@ -89,6 +89,8 @@ def load_project_config(project_arg=None):
 MODEL_NAME = DEFAULT_DEEPSEEK_MODEL
 RETRIEVAL_MODEL = "BAAI/bge-small-en-v1.5"
 MIN_CHUNK_SIZE = 1000
+RETRIEVED_CONTEXTS_PER_SECTION = 4
+NARRATION_TEMPERATURE = 0.7
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -379,6 +381,7 @@ def update_story_summary(client, story_summary, new_response):
     summary_resp = create_deepseek_chat_completion(
         client,
         model=MODEL_NAME,
+        temperature=0.2,
         messages=[{"role": "user", "content": prompt}],
     )
     return summary_resp.choices[0].message.content.strip()
@@ -446,7 +449,7 @@ FULL_OUTLINE_WITH_STATUS:
         response = create_deepseek_chat_completion(
             client,
             model=MODEL_NAME,
-            temperature=1.2,
+            temperature=NARRATION_TEMPERATURE,
             messages=messages,
         )
 
@@ -561,7 +564,10 @@ if faiss_index is None:
 
 # Build per-section queries
 print("Building per-section queries from retrieved chunks...")
-contexts = [hybrid_retrieve(outline, faiss_index, model, chunks, k=6) for outline in outlines]
+contexts = [
+    hybrid_retrieve(outline, faiss_index, model, chunks, k=RETRIEVED_CONTEXTS_PER_SECTION)
+    for outline in outlines
+]
 queries = [
     (
         f"SECTION_NUMBER: {i + 1}\n"

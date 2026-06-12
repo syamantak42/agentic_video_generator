@@ -31,14 +31,17 @@ def build_prompts(config, narration_data, outline_data):
     narration_style = config.get("narration_style", [])
     historical_context = config.get("historical_context", "")
     characters = config.get("characters", {})
-    n_section = config.get("n_section", narration_data.get("n_sections", ""))
     sections_data = narration_data.get("sections", [])
+    narration_config = config.get("_project_config", {}).get("narration_config", {})
+    words_per_section = narration_config.get("words_per_section", 400)
+    frames_per_section = narration_config.get("frames_per_section", 2)
 
     system_prompt = load_prompt("validate_narration_system.txt")
     user_prompt = render_prompt(
         "validate_narration_user.txt",
         video_title=video_title,
-        n_section=n_section,
+        words_per_section=words_per_section,
+        frames_per_section=frames_per_section,
         narration_style_json=json.dumps(narration_style, ensure_ascii=False, indent=2),
         historical_context=historical_context,
         characters_json=json.dumps(characters, ensure_ascii=False, indent=2),

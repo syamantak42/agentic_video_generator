@@ -1,4 +1,8 @@
-You are maintaining a concise running summary of a YouTube narration script.
+You are maintaining continuity notes for a YouTube narration script.
+
+MARKER_DEFINITIONS:
+- `STORY_SUMMARY_SO_FAR:` contains prior continuity notes.
+- `NEWLY_GENERATED_SECTION:` contains the latest generated section JSON.
 
 STORY_SUMMARY_SO_FAR:
 ${story_summary}
@@ -7,5 +11,9 @@ NEWLY_GENERATED_SECTION:
 ${new_response}
 
 TASK:
-Update `STORY_SUMMARY_SO_FAR:` using `NEWLY_GENERATED_SECTION:` so it reflects everything so far, in 3 to 6 sentences.
-Keep it brief but concise, coherent, dense, information-rich; preserving continuity and key narrative points.
+Update the continuity notes in 5 short lines:
+LAST_BEAT: where the narration just ended.
+FACTS_USED: key facts already covered; avoid repeating them later.
+THREAD: the main idea carrying into the next section.
+TONE: the current emotional/intellectual tone.
+DO_NOT_REPEAT: phrases, examples, or explanations that should not be reused.
