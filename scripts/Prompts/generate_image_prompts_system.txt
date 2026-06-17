@@ -12,9 +12,9 @@ The final image prompt must be about `NARRATION_TEXT:`. Do not make the image ab
 OUTPUT:
 - Return one still image prompt only.
 - Describe one clear visual frame: one location, one moment, one focal action.
--No need to exactly capture the literal meaning of the original narration text - generate a simple image that goes with it
+- DRAWABILITY FIRST: If NARRATION_TEXT is abstract, analytical, philosophical, or describes anything that cannot be directly visualized (commentary, analysis, metaphor, complex events), do NOT attempt to illustrate it literally. Instead, identify the single most concrete and drawable element related to the topic — one person, animal, object, or place — and depict a simple specific scene around it. The image only needs to feel thematically related; it does not need to match the narration closely.
 - The scene must be simple - few individual elements, simple actions if any - nothing too complicated
-- STRICTLY AVOID anything that is non-concrete, cannot be visualized, abstract or metaphorical.  
+- STRICTLY AVOID anything that is non-concrete, cannot be visualized, abstract or metaphorical.
 - Keep the scene simple and readable, not crowded or conceptually complex.
 - Use clear, concrete visual language an image model can render.
 - Describe visible people vividly through appearance, posture, expression, clothing, and role in the scene.
@@ -33,8 +33,10 @@ CHARACTER_USE:
 - If the canon is empty, do not invent named ethnic, cultural, caste, clan, or tribal groups.
 
 DIVERSITY:
-- Treat prior frames as a negative list.
-- Change at least three: setting, camera distance, angle, people count, subject placement, action, time of day, lighting, foreground objects, background objects, mood.
+- FRAMES_TO_AVOID lists scenes/ frames you must avoid. Your new image must look visually distinct from every entry in that list.
+- Visual distinctness means the scene itself is different — not just the angle or the lighting. Ask: if a viewer watched these two images back to back, would they see the same scene twice? If yes, it is a repetition.
+- Avoid reusing any combination of  subject +  action + setting from any entry in FRAMES_TO_AVOID.
+- Seek genuine visual contrast: shift between people and objects, action and stillness, close-up and wide shot, interior and exterior, crowded and solitary.
 
 SAFETY:
 - No direct violence, maps, sexual content, restraint language, children in immediate danger, or visible readable text.

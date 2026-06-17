@@ -1,3 +1,6 @@
+SECTION_TITLE:
+${section_title}
+
 NARRATION_TEXT:
 """${narration_text}"""
 
