@@ -31,6 +31,7 @@ Usage:
 """
 
 import os
+import time
 import fitz  # PyMuPDF
 import wikipediaapi
 import requests
@@ -139,19 +140,49 @@ def read_pdf(file_path):
     doc = fitz.open(file_path)
     return "\n".join([page.get_text() for page in doc])
 
-def get_wikipedia_text(title):
+def get_wikipedia_text(title, retries=4, retry_delay=5):
     """
-    Fetch and return text content from Wikipedia page.
-    
+    Fetch plain text from a Wikipedia page via the MediaWiki API.
+
+    Uses requests directly instead of the wikipediaapi library to avoid
+    empty-response failures caused by user-agent or library-level issues.
+
     Args:
-        title: Wikipedia page title
-    
+        title: Wikipedia page title (spaces, not underscores)
+        retries: Number of retry attempts on transient errors
+        retry_delay: Seconds to wait between retries
+
     Returns:
-        str: Full page text if found, None otherwise
-    """    
-    wiki = wikipediaapi.Wikipedia(language="en", user_agent="YourAppName/1.0 (your@email.com)")
-    page = wiki.page(title)
-    return page.text if page.exists() else None
+        str: Full page text if found, None if the page does not exist
+    """
+    api_url = "https://en.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "format": "json",
+        "prop": "extracts",
+        "titles": title,
+        "explaintext": True,
+        "exsectionformat": "plain",
+    }
+    headers = {"User-Agent": "NarrationGenerator/1.0 (educational use)"}
+
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(api_url, params=params, headers=headers, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            pages = data.get("query", {}).get("pages", {})
+            for page_id, page in pages.items():
+                if page_id == "-1":
+                    print(f"[WARN] Wikipedia page not found: '{title}'")
+                    return None
+                return page.get("extract", "") or None
+        except Exception as e:
+            print(f"[WARN] Wikipedia fetch attempt {attempt}/{retries} failed for '{title}': {e}")
+            if attempt < retries:
+                time.sleep(retry_delay)
+
+    raise RuntimeError(f"Could not fetch Wikipedia page '{title}' after {retries} attempts.")
 
 def get_webpage_text(url):
     """

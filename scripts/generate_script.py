@@ -117,19 +117,49 @@ outline_json_path = os.path.join(json_dir, 'outline_texts.json')
 # ---------------- UTILITY FUNCTIONS ---------------------
 # ========================================================
 
-def get_wikipedia_text(title):
+def get_wikipedia_text(title, retries=4, retry_delay=5):
     """
-    Fetch and return text content from Wikipedia page.
-    
+    Fetch plain text from a Wikipedia page via the MediaWiki API.
+
+    Uses requests directly instead of the wikipediaapi library to avoid
+    empty-response failures caused by user-agent or library-level issues.
+
     Args:
-        title: Wikipedia page title
-    
+        title: Wikipedia page title (spaces, not underscores)
+        retries: Number of retry attempts on transient errors
+        retry_delay: Seconds to wait between retries
+
     Returns:
-        str: Full page text if found, None otherwise
-    """    
-    wiki = wikipediaapi.Wikipedia(language="en", user_agent="NarrationGenerator/1.0")
-    page = wiki.page(title)
-    return page.text if page.exists() else None
+        str: Full page text if found, None if the page does not exist
+    """
+    api_url = "https://en.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "format": "json",
+        "prop": "extracts",
+        "titles": title,
+        "explaintext": True,
+        "exsectionformat": "plain",
+    }
+    headers = {"User-Agent": "NarrationGenerator/1.0 (educational use)"}
+
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(api_url, params=params, headers=headers, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            pages = data.get("query", {}).get("pages", {})
+            for page_id, page in pages.items():
+                if page_id == "-1":
+                    print(f"[WARN] Wikipedia page not found: '{title}'")
+                    return None
+                return page.get("extract", "") or None
+        except Exception as e:
+            print(f"[WARN] Wikipedia fetch attempt {attempt}/{retries} failed for '{title}': {e}")
+            if attempt < retries:
+                time.sleep(retry_delay)
+
+    raise RuntimeError(f"Could not fetch Wikipedia page '{title}' after {retries} attempts.")
 
 
 def get_webpage_text(url):
@@ -262,29 +292,46 @@ def process_all_documents(source_dir, reference_links):
     return all_chunks
 
 
-def build_chunk_cache_metadata(source_dir, reference_links):
-    """Capture enough local state to know when cached chunks are stale."""
+def build_chunk_cache_metadata(source_dir, config):
+    """Capture state of declared content sources to detect when cache is stale.
+
+    Only files listed under source_material and intro_material in config, plus
+    all reference_links and intro_material URLs, are considered. Changes outside
+    these three config fields do not invalidate the cache.
+    """
+    source_files = config.get("source_material", [])
+    intro_items = config.get("intro_material", [])
+    reference_links = config.get("reference_links", [])
+
+    intro_local = [i for i in intro_items if not i.startswith("http://") and not i.startswith("https://")]
+    intro_urls = [i for i in intro_items if i.startswith("http://") or i.startswith("https://")]
+
+    # Deduplicated union of all local file names that feed the index
+    all_local = list(dict.fromkeys(source_files + intro_local))
+
     tracked_files = []
-    for file in sorted(os.listdir(source_dir)):
-        path = os.path.join(source_dir, file)
-        if not os.path.isfile(path):
-            continue
-        if file == "config.json" or file.endswith(".txt") or file.endswith(".pdf"):
+    for filename in sorted(all_local):
+        path = os.path.join(source_dir, filename)
+        if os.path.isfile(path):
             tracked_files.append({
-                "name": file,
+                "name": filename,
                 "mtime": os.path.getmtime(path),
                 "size": os.path.getsize(path),
             })
+        else:
+            tracked_files.append({"name": filename, "mtime": None, "size": None})
+
+    all_urls = list(dict.fromkeys(reference_links + intro_urls))
 
     return {
-        "reference_links": reference_links,
+        "urls": all_urls,
         "tracked_files": tracked_files,
         "min_chunk_size": MIN_CHUNK_SIZE,
     }
 
 
-def chunk_cache_is_stale(source_dir, reference_links, chunks_path, chunks_meta_path):
-    """Return True when chunks cache is missing or local inputs changed."""
+def chunk_cache_is_stale(source_dir, config, chunks_path, chunks_meta_path):
+    """Return True when chunks cache is missing or any declared content source changed."""
     if not os.path.exists(chunks_path) or not os.path.exists(chunks_meta_path):
         return True
 
@@ -294,7 +341,7 @@ def chunk_cache_is_stale(source_dir, reference_links, chunks_path, chunks_meta_p
     except Exception:
         return True
 
-    current_meta = build_chunk_cache_metadata(source_dir, reference_links)
+    current_meta = build_chunk_cache_metadata(source_dir, config)
     return cached_meta != current_meta
 
 
@@ -500,7 +547,7 @@ print(
 )
 
 # Prepare chunks
-if not chunk_cache_is_stale(source_dir, reference_links, chunks_path, chunks_meta_path):
+if not chunk_cache_is_stale(source_dir, config, chunks_path, chunks_meta_path):
     print(f"[LOAD] Using cached chunks: {chunks_path}")
     with open(chunks_path, "r", encoding="utf-8") as f:
         chunks = json.load(f)
@@ -510,7 +557,7 @@ else:
     with open(chunks_path, "w", encoding="utf-8") as f:
         json.dump(chunks, f, ensure_ascii=False, indent=2)
     with open(chunks_meta_path, "w", encoding="utf-8") as f:
-        json.dump(build_chunk_cache_metadata(source_dir, reference_links), f, ensure_ascii=False, indent=2)
+        json.dump(build_chunk_cache_metadata(source_dir, config), f, ensure_ascii=False, indent=2)
     if os.path.exists(faiss_path):
         os.remove(faiss_path)
         print(f"[REBUILD] Removed stale FAISS index: {faiss_path}")
