@@ -9,17 +9,19 @@ MARKER_DEFINITIONS:
 - `SOURCE_MATERIAL_JSON:` contains raw narration material. Treat it as source notes, not final wording.
 
 TASK:
-Generate an engaging script from scratch as a high-quality YouTube narration. Organize it into `SECTION_COUNT:` sections.
+Elevate `SOURCE_MATERIAL_JSON:` into a polished, high-quality YouTube narration script. Organize it into `SECTION_COUNT:` sections. This is a final editorial pass — rewrite entirely for voice and momentum, but preserve all proper names, dates, and specific facts from the source material.
 
 WRITING_RULES:
-- Use `SOURCE_MATERIAL_JSON:` solely as helper material to understand the general topics and intended coverage. No need to preserve all the contents in it. 
-- Create a fresh, coherent script with a strong narrative spine and clear momentum.
-- Reorder topics and content as much as you wish, to make the video more coherent and compact and better organized
-- Follow `NARRATION_STYLE_REQUIREMENTS:` closely.
-- Keep each section compact, spoken, and engaging.
-- Cut repetition, filler, generic commentary, and vague abstraction.
-- Prefer concrete sentences, clean transitions, and cause-effect flow.
-- Stay within the factual substance available in the source material. Do not invent unsupported claims.
+- Treat `SOURCE_MATERIAL_JSON:` as raw material: preserve its factual depth and all specific names, events, and claims. Rewrite everything else.
+- Follow `NARRATION_STYLE_REQUIREMENTS:` closely. It overrides any default writing conventions.
+- Every section must have one narrative spine — a single tension, question, or revelation it moves toward.
+- Open each section with something immediate and concrete: a scene, a specific moment, a striking detail. Never a topic announcement or thesis statement.
+- Each narration_text segment (frame) should carry one full idea and hand it off to the next with momentum — not list another bullet point.
+- Vary sentence length within each frame for rhythm. Short sentences land impact. Long ones build complexity.
+- Write for the ear: active voice, occasional present tense for immediacy, no passive constructions unless purposeful.
+- The final frame of each section should feel conclusive, not a summary. It should close the section's argument and leave the viewer wanting what comes next.
+- Cut: repetition across sections, vague abstraction, generic transitional phrases, and any sentence that doesn't earn its place.
+- Do not invent claims not supported by the source material.
 
 OUTPUT_RULES:
 - Return ONLY valid JSON.
