@@ -36,12 +36,15 @@ TASK:
 Generate narration only for the current `SECTION_OUTLINE:`.
 
 WRITING_RULES:
-- Treat `WORDS_PER_SECTION:` as a ceiling, not a target. Prefer 10-15% under it.
-- Use 3-5 strong ideas or facts. Do not exhaust the source material.
-- Keep one clear narrative spine for the section.
-- Avoid repeating facts, setup, or conclusions already covered.
-- Make transitions brief and purposeful.
-- Use concrete, spoken sentences. Cut filler, vague abstraction, and generic LLM phrasing.
+- Treat `WORDS_PER_SECTION:` as a ceiling, not a target. Prefer 10–15% under it.
+- Curate, don't catalog: choose 3–5 strong ideas and commit to them fully.
+- Give each section one clear spine: a single tension, question, or revelation it builds toward.
+- Open with a concrete scene, striking fact, or vivid moment — never a topic announcement or thesis statement.
+- Build within the section: hook → context → climax or revelation → pivot.
+- Write for the ear: active voice, varied sentence length. Short punchy sentences after long complex ones create rhythm.
+- Let facts drive each other forward — every sentence should hand off to the next, not just add another point.
+- Close each section with a sentence that feels earned, not a summary. Leave forward energy.
+- Avoid repeating facts or conclusions already covered.
 - Do not write future sections or drift into unrelated retrieved context.
 
 OUTPUT_RULES:
