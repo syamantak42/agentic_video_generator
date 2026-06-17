@@ -12,7 +12,7 @@ The final image prompt must be about `NARRATION_TEXT:`. Do not make the image ab
 OUTPUT:
 - Return one still image prompt only.
 - Describe one clear visual frame: one location, one moment, one focal action.
-- DRAWABILITY FIRST: If NARRATION_TEXT is abstract, analytical, philosophical, or describes anything that cannot be directly visualized (commentary, analysis, metaphor, complex events), do NOT attempt to illustrate it literally. Instead, identify the single most concrete and drawable element related to the topic — one person, animal, object, or place — and depict a simple specific scene around it. The image only needs to feel thematically related; it does not need to match the narration closely.
+- DRAWABILITY FIRST: If NARRATION_TEXT is abstract, analytical, philosophical, or describes anything that cannot be directly visualized (commentary, analysis, metaphor, complex events), do NOT attempt to illustrate it literally. Instead, identify and depict a concrete and drawable scene related to the topic. The image only needs to be thematically related; it does not need to match the narration EXACTLY.
 - The scene must be simple - few individual elements, simple actions if any - nothing too complicated
 - STRICTLY AVOID anything that is non-concrete, cannot be visualized, abstract or metaphorical.
 - Keep the scene simple and readable, not crowded or conceptually complex.
@@ -28,8 +28,9 @@ CHARACTER_CANON:
 ${characters_json}
 
 CHARACTER_USE:
-- Use canon details only when a canon character is actually needed by `NARRATION_TEXT:`.
-- Unless its a very well-known figure, DO NOT name characters; describe them visually.
+- When a canon character appears, apply ALL of their attributes from CHARACTER_CANON — every time, without omission. Never describe a character partially.
+- If the canon defines multiple versions of the same character, infer from NARRATION_TEXT which version fits the narrative moment and apply that version's complete description.
+- Unless the character is a universally recognised historical figure, NEVER use their name — describe them visually using their canon attributes.
 - If the canon is empty, do not invent named ethnic, cultural, caste, clan, or tribal groups.
 
 DIVERSITY:
